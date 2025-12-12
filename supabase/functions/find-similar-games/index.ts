@@ -7,7 +7,6 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -16,18 +15,16 @@ serve(async (req) => {
     const { gameId, gameTitle, gameGenre, gameDescription, gameCategory } = await req.json();
     
     console.log(`Finding similar games for: ${gameTitle}`);
-    console.log(`Genre: ${gameGenre}, Category: ${gameCategory}`);
 
-    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
-    if (!GEMINI_API_KEY) {
-      throw new Error("GEMINI_API_KEY is not configured");
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) {
+      throw new Error("LOVABLE_API_KEY is not configured");
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Fetch all other games
     const { data: allGames, error: gamesError } = await supabase
       .from("games")
       .select("id, title, slug, genre, category, description, image, rating")
@@ -45,9 +42,6 @@ serve(async (req) => {
       });
     }
 
-    console.log(`Found ${allGames.length} other games to analyze`);
-
-    // Prepare games list for AI analysis
     const gamesForAnalysis = allGames.map((g, index) => ({
       index,
       title: g.title,
@@ -65,40 +59,29 @@ serve(async (req) => {
 قائمة الألعاب للمقارنة:
 ${gamesForAnalysis.map(g => `[${g.index}] ${g.title} | التصنيف: ${g.genre} | ${g.description}`).join("\n")}
 
-حلل الألعاب وأعطني أرقام (index) أفضل 6 ألعاب الأكثر تشابهاً بناءً على:
-1. نوع اللعب (قصة، أكشن، عالم مفتوح، إلخ)
-2. الأجواء والثيمات المشتركة
-3. تجربة اللاعب المشابهة
+حلل الألعاب وأعطني أرقام (index) أفضل 6 ألعاب الأكثر تشابهاً.
+أجب بـ JSON فقط بهذا الشكل: {"similar": [0, 1, 2, 3, 4, 5]}`;
 
-أجب بـ JSON فقط بهذا الشكل: {"similar": [0, 1, 2, 3, 4, 5]}
-حيث الأرقام هي index الألعاب الأكثر تشابهاً مرتبة من الأكثر تشابهاً إلى الأقل.`;
+    console.log("Calling Lovable AI Gateway for similar games analysis...");
 
-    console.log("Calling Gemini API for similar games analysis...");
-
-    const aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+    const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
+        "Authorization": `Bearer ${LOVABLE_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        contents: [
-          { role: "user", parts: [{ text: "أنت محلل ألعاب متخصص. أجب دائماً بـ JSON فقط." }] },
-          { role: "model", parts: [{ text: "فهمت، سأرد بـ JSON فقط." }] },
-          { role: "user", parts: [{ text: prompt }] }
+        model: "google/gemini-2.5-flash",
+        messages: [
+          { role: "system", content: "أنت محلل ألعاب متخصص. أجب دائماً بـ JSON فقط." },
+          { role: "user", content: prompt }
         ],
-        generationConfig: {
-          temperature: 0.3,
-          maxOutputTokens: 256,
-        },
       }),
     });
 
     if (!aiResponse.ok) {
-      const errorText = await aiResponse.text();
-      console.error("Gemini API error:", aiResponse.status, errorText);
-      
+      console.error("Lovable AI Gateway error:", aiResponse.status);
       // Fallback to basic genre matching
-      console.log("Falling back to basic genre matching");
       const genreMatches = allGames
         .filter(g => {
           const gGenre = (g.genre || g.category || "").toLowerCase();
@@ -113,20 +96,17 @@ ${gamesForAnalysis.map(g => `[${g.index}] ${g.title} | التصنيف: ${g.genre
     }
 
     const aiData = await aiResponse.json();
-    const aiContent = aiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    const aiContent = aiData.choices?.[0]?.message?.content || "";
     
     console.log("AI Response:", aiContent);
 
-    // Parse AI response
     let similarIndices: number[] = [];
     try {
-      // Extract JSON from response
       const jsonMatch = aiContent.match(/\{[\s\S]*"similar"[\s\S]*\[[\s\S]*\][\s\S]*\}/);
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]);
         similarIndices = parsed.similar || [];
       } else {
-        // Try to extract numbers directly
         const numbers = aiContent.match(/\d+/g);
         if (numbers) {
           similarIndices = numbers.map(Number).slice(0, 6);
@@ -134,17 +114,13 @@ ${gamesForAnalysis.map(g => `[${g.index}] ${g.title} | التصنيف: ${g.genre
       }
     } catch (parseError) {
       console.error("Error parsing AI response:", parseError);
-      // Fallback: return first 6 games
       similarIndices = [0, 1, 2, 3, 4, 5];
     }
 
-    // Map indices to actual games
     const similarGames = similarIndices
       .filter(idx => idx >= 0 && idx < allGames.length)
       .map(idx => allGames[idx])
       .slice(0, 6);
-
-    console.log(`Returning ${similarGames.length} similar games`);
 
     return new Response(JSON.stringify({ similarGames }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
