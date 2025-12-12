@@ -23,12 +23,12 @@ serve(async (req) => {
   }
 
   try {
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+    if (!OPENROUTER_API_KEY) {
+      throw new Error("OPENROUTER_API_KEY is not configured");
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey);
@@ -153,16 +153,18 @@ serve(async (req) => {
   }
 ]`;
 
-      console.log("Calling AI API for challenges...");
+      console.log("Calling OpenRouter API for challenges...");
       
-      const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      const aiResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          Authorization: `Bearer ${OPENROUTER_API_KEY}`,
           "Content-Type": "application/json",
+          "HTTP-Referer": "https://ktm.lovable.app",
+          "X-Title": "KTM Challenges",
         },
         body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
+          model: "nex-agi/deepseek-v3.1-nex-n1:free",
           messages: [
             { role: "system", content: "أنت مساعد يكتب تحديات ألعاب إبداعية وغريبة باللغة العربية. أرجع JSON فقط بدون أي نص إضافي." },
             { role: "user", content: prompt }
@@ -172,7 +174,7 @@ serve(async (req) => {
 
       if (!aiResponse.ok) {
         const errorText = await aiResponse.text();
-        console.error("AI API error:", errorText);
+        console.error("OpenRouter API error:", errorText);
         continue;
       }
 

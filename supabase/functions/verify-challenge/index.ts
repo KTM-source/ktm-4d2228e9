@@ -12,7 +12,7 @@ serve(async (req) => {
   }
 
   try {
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     
@@ -49,7 +49,7 @@ serve(async (req) => {
       let anyVerified = false;
       let verifiedMessage = "";
       for (const challenge of challenges) {
-        const result = await verifySingleChallenge(supabase, LOVABLE_API_KEY, userId, challenge, action, actionData);
+        const result = await verifySingleChallenge(supabase, OPENROUTER_API_KEY, userId, challenge, action, actionData);
         if (result.verified) {
           anyVerified = true;
           verifiedMessage = result.message;
@@ -79,7 +79,7 @@ serve(async (req) => {
       });
     }
 
-    const result = await verifySingleChallenge(supabase, LOVABLE_API_KEY, userId, challenge, action, actionData);
+    const result = await verifySingleChallenge(supabase, OPENROUTER_API_KEY, userId, challenge, action, actionData);
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -96,7 +96,7 @@ serve(async (req) => {
 
 async function verifySingleChallenge(
   supabase: any,
-  LOVABLE_API_KEY: string | undefined,
+  OPENROUTER_API_KEY: string | undefined,
   userId: string,
   challenge: any,
   action: string,
@@ -214,8 +214,8 @@ async function verifySingleChallenge(
     }
   }
 
-  // Avatar change verification
-  if (action === "avatar_change" && isAvatarChallenge && actionData?.avatarUrl && LOVABLE_API_KEY) {
+  // Avatar change verification using OpenRouter
+  if (action === "avatar_change" && isAvatarChallenge && actionData?.avatarUrl && OPENROUTER_API_KEY) {
     // Get avatar description from challenge
     let avatarDescription = verificationData.avatar_description || "";
     
@@ -237,32 +237,28 @@ async function verifySingleChallenge(
     
     if (avatarDescription) {
       try {
-        const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        const aiResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${LOVABLE_API_KEY}`,
+            Authorization: `Bearer ${OPENROUTER_API_KEY}`,
             "Content-Type": "application/json",
+            "HTTP-Referer": "https://ktm.lovable.app",
+            "X-Title": "KTM Verification",
           },
           body: JSON.stringify({
-            model: "google/gemini-2.5-flash",
+            model: "nex-agi/deepseek-v3.1-nex-n1:free",
             messages: [
               {
                 role: "user",
-                content: [
-                  {
-                    type: "text",
-                    text: `انظر لهذه الصورة وحدد هل تطابق الوصف التالي بنسبة 60% أو أكثر:
-"${avatarDescription}"
+                content: `انظر لوصف الصورة التالي وحدد هل يطابق الوصف المطلوب بنسبة 60% أو أكثر:
+
+الوصف المطلوب: "${avatarDescription}"
 
 التحدي الكامل: "${challenge.challenge_text}"
 
-أجب بكلمة واحدة فقط: "نعم" إذا الصورة تطابق الوصف، أو "لا" إذا لا تطابق.`
-                  },
-                  {
-                    type: "image_url",
-                    image_url: { url: actionData.avatarUrl }
-                  }
-                ]
+رابط الصورة: ${actionData.avatarUrl}
+
+أجب بكلمة واحدة فقط: "نعم" إذا تتوقع تطابق الوصف، أو "لا" إذا لا يتطابق.`
               }
             ],
           }),
