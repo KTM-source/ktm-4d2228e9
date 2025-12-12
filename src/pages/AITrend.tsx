@@ -61,6 +61,7 @@ import {
   Copy,
   Check,
   Code2,
+  Square,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -758,6 +759,7 @@ export default function AITrend() {
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Update sidebar state when mobile changes
   useEffect(() => {
@@ -1247,6 +1249,9 @@ https://images.igdb.com/igdb/image/upload/t_cover_big/[IMAGE_ID].jpg
 
     let assistantContent = "";
 
+    // Create abort controller for this request
+    abortControllerRef.current = new AbortController();
+
     try {
       // Get previous messages excluding the loading one
       const previousMessages = messages
@@ -1267,6 +1272,7 @@ https://images.igdb.com/igdb/image/upload/t_cover_big/[IMAGE_ID].jpg
             avatarUrl: profile?.avatar_url,
           },
         }),
+        signal: abortControllerRef.current.signal,
       });
 
       if (!response.ok || !response.body) throw new Error("Failed");
@@ -1329,17 +1335,44 @@ https://images.igdb.com/igdb/image/upload/t_cover_big/[IMAGE_ID].jpg
         )
       );
 
-    } catch (error) {
-      console.error("Error:", error);
-      setMessages(prev => 
-        prev.map(msg => 
-          msg.id === loadingMsgId 
-            ? { ...msg, content: "عذراً، حدث خطأ. حاول مرة أخرى.", isAnimating: false }
-            : msg
-        )
-      );
+    } catch (error: any) {
+      // Check if the error is due to abort
+      if (error.name === 'AbortError') {
+        // User stopped the generation - keep what we have
+        setMessages(prev => 
+          prev.map(msg => 
+            msg.id === loadingMsgId 
+              ? { ...msg, isAnimating: false }
+              : msg
+          )
+        );
+        // Save partial response to DB if we have content
+        if (assistantContent.trim()) {
+          await supabase.from("ai_messages").insert({
+            conversation_id: convId,
+            role: "assistant",
+            content: assistantContent,
+          });
+        }
+      } else {
+        console.error("Error:", error);
+        setMessages(prev => 
+          prev.map(msg => 
+            msg.id === loadingMsgId 
+              ? { ...msg, content: "عذراً، حدث خطأ. حاول مرة أخرى.", isAnimating: false }
+              : msg
+          )
+        );
+      }
     } finally {
       setIsLoading(false);
+      abortControllerRef.current = null;
+    }
+  };
+
+  const stopGeneration = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
     }
   };
 
@@ -1853,10 +1886,17 @@ https://images.igdb.com/igdb/image/upload/t_cover_big/[IMAGE_ID].jpg
                   <Input ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={handleKeyDown}
                     placeholder="اكتب رسالتك هنا..." disabled={isLoading}
                     className="bg-white/5 border-white/10 focus:border-emerald-500/50 h-14 pr-5 pl-16 text-base rounded-xl" dir="auto" />
-                  <Button onClick={() => sendMessage()} disabled={isLoading || !input.trim()}
-                    className="absolute left-2 top-1/2 -translate-y-1/2 w-12 h-12 bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 rounded-xl shadow-xl shadow-emerald-500/30 disabled:opacity-50">
-                    {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
-                  </Button>
+                  {isLoading ? (
+                    <Button onClick={stopGeneration}
+                      className="absolute left-2 top-1/2 -translate-y-1/2 w-12 h-12 bg-gradient-to-r from-red-500 to-orange-500 hover:from-red-600 hover:to-orange-600 rounded-xl shadow-xl shadow-red-500/30">
+                      <Square className="w-5 h-5" />
+                    </Button>
+                  ) : (
+                    <Button onClick={() => sendMessage()} disabled={!input.trim()}
+                      className="absolute left-2 top-1/2 -translate-y-1/2 w-12 h-12 bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 rounded-xl shadow-xl shadow-emerald-500/30 disabled:opacity-50">
+                      <Send className="w-5 h-5" />
+                    </Button>
+                  )}
                 </div>
                 <p className="text-center text-xs text-gray-500 mt-3">
                   KTM AI • Gemini AI • خصوصيتك محفوظة
