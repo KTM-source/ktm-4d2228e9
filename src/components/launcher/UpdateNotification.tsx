@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { useElectron } from '@/hooks/useElectron';
 
 const VERSION_CHECK_URL = 'https://ktm.lovable.app/version.txt';
-const DOWNLOAD_URL = 'https://github.com/KTM-source/ktm/releases/tag/v1.1.0';
+const DOWNLOAD_URL = 'https://github.com/KTM-source/ktm/releases/download/v1.1.0/KTM.Launcher-1.1.0.exe';
 
 interface UpdateNotificationProps {
   onClose?: () => void;
