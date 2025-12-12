@@ -51,8 +51,8 @@ export async function handleWebDownload(downloadUrl: string): Promise<void> {
   const result = await resolveDownloadLink(downloadUrl);
   
   if (result.success && result.directLink) {
-    // Open the direct download link in a new tab
-    window.open(result.directLink, '_blank');
+    // Open the direct download link in the same tab
+    window.location.href = result.directLink;
   } else {
     throw new Error(result.error || 'فشل في الحصول على رابط التحميل');
   }
