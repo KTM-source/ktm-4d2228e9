@@ -5,14 +5,14 @@ const KTM_API_URL = 'https://ktm.discloud.app/api';
 interface DownloadResult {
   success: boolean;
   directLink?: string;
-  filename?: string;
-  size?: number;
+  fallback?: boolean;
   error?: string;
+  ms?: number;
 }
 
 export async function resolveDownloadLink(originalUrl: string): Promise<DownloadResult> {
-  // Check if it's a Gofile link that needs resolving
-  if (originalUrl.includes('gofile.io/d/')) {
+  // Check if it's a BuzzHeavier or Trashbytes link that needs resolving
+  if (originalUrl.includes('buzzheavier.com') || originalUrl.includes('trashbytes.net')) {
     try {
       const response = await fetch(KTM_API_URL, {
         method: 'POST',
@@ -24,23 +24,29 @@ export async function resolveDownloadLink(originalUrl: string): Promise<Download
 
       const data = await response.json();
 
-      if (data.error) {
+      if (data.error && !data.success) {
         return { success: false, error: data.error };
       }
 
       return {
         success: true,
         directLink: data.directLink,
-        filename: data.filename,
-        size: data.size,
+        fallback: data.fallback,
+        ms: data.ms,
       };
     } catch (error) {
       console.error('Error resolving download link:', error);
-      return { success: false, error: 'فشل في استخراج رابط التحميل' };
+      // Fallback to original URL on error
+      return { 
+        success: true, 
+        directLink: originalUrl,
+        fallback: true,
+        error: 'فشل في استخراج رابط التحميل - استخدام الرابط الأصلي'
+      };
     }
   }
 
-  // For non-Gofile links, return the original URL
+  // For all other links, return the original URL directly
   return {
     success: true,
     directLink: originalUrl,
