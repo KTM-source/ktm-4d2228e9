@@ -443,13 +443,13 @@ function fetchJson(url, method = 'GET', headers = {}) {
 }
 
 // Download game with pause/resume support
-ipcMain.handle('download-game', async (event, { gameId, gameTitle, downloadUrl, gameSlug, gameImage, resumeFrom }) => {
+async function startDownload({ gameId, gameTitle, downloadUrl, gameSlug, gameImage, resumeFrom }) {
   // Cancel any existing download
   if (currentDownloadRequest) {
     try { currentDownloadRequest.destroy(); } catch (e) {}
     currentDownloadRequest = null;
   }
-  
+
   // Pause active downloads (don't clear them)
   for (const [id, data] of activeDownloads) {
     if (data.status === 'downloading') {
@@ -464,17 +464,17 @@ ipcMain.handle('download-game', async (event, { gameId, gameTitle, downloadUrl, 
 
   return new Promise(async (resolve, reject) => {
     const gameFolder = path.join(downloadPath, gameSlug);
-    
+
     if (!fs.existsSync(gameFolder)) {
       fs.mkdirSync(gameFolder, { recursive: true });
     }
-    
+
     const downloadId = resumeFrom?.downloadId || `${gameId}-${Date.now()}`;
     let finalUrl = downloadUrl;
     let fileName = `${gameSlug}.zip`;
     let gofileToken = null;
-    
-    // Check if it's a Gofile link
+
+    // Check if it's a Gofile link (legacy support)
     if (downloadUrl.includes('gofile.io/d/')) {
       try {
         mainWindow?.webContents.send('download-status', {
@@ -483,7 +483,7 @@ ipcMain.handle('download-game', async (event, { gameId, gameTitle, downloadUrl, 
           status: 'resolving',
           message: 'جاري استخراج رابط التحميل المباشر...'
         });
-        
+
         const resolved = await resolveGofileLink(downloadUrl);
         finalUrl = resolved.directLink;
         fileName = resolved.fileName || fileName;
@@ -498,37 +498,37 @@ ipcMain.handle('download-game', async (event, { gameId, gameTitle, downloadUrl, 
         return;
       }
     }
-    
+
     const isRar = fileName.toLowerCase().endsWith('.rar') || finalUrl.toLowerCase().includes('.rar');
     const extension = isRar ? '.rar' : '.zip';
     const archivePath = path.join(gameFolder, `${gameSlug}${extension}`);
-    
+
     // Check for existing partial download
     let startByte = 0;
     if (resumeFrom && resumeFrom.downloadedSize > 0 && fs.existsSync(archivePath)) {
       const stats = fs.statSync(archivePath);
       startByte = stats.size;
     }
-    
+
     const protocol = finalUrl.startsWith('https') ? https : http;
-    
+
     const requestHeaders = {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
       'Accept': '*/*',
       'Accept-Encoding': 'identity', // Disable compression for resume support
       'Connection': 'keep-alive'
     };
-    
+
     // Add range header for resume
     if (startByte > 0) {
       requestHeaders['Range'] = `bytes=${startByte}-`;
     }
-    
+
     if (gofileToken) {
       requestHeaders['Cookie'] = `accountToken=${gofileToken}`;
     }
-    
-    const request = protocol.get(finalUrl, { 
+
+    const request = protocol.get(finalUrl, {
       timeout: 120000, // Increased timeout for large files
       headers: requestHeaders
     }, (response) => {
@@ -536,32 +536,32 @@ ipcMain.handle('download-game', async (event, { gameId, gameTitle, downloadUrl, 
         handleDownload(response.headers.location);
         return;
       }
-      
+
       // Handle 416 Range Not Satisfiable - start fresh
       if (response.statusCode === 416) {
         startByte = 0;
         handleDownloadFresh();
         return;
       }
-      
+
       if (response.statusCode !== 200 && response.statusCode !== 206) {
         handleError(new Error(`HTTP ${response.statusCode}`));
         return;
       }
-      
+
       handleResponse(response, response.statusCode === 206);
     });
 
     currentDownloadRequest = request;
-    
+
     function handleDownloadFresh() {
       // Delete existing partial file and start fresh
       if (fs.existsSync(archivePath)) {
         fs.unlinkSync(archivePath);
       }
       startByte = 0;
-      
-      const freshRequest = protocol.get(finalUrl, { 
+
+      const freshRequest = protocol.get(finalUrl, {
         timeout: 120000,
         headers: {
           ...requestHeaders,
@@ -577,10 +577,10 @@ ipcMain.handle('download-game', async (event, { gameId, gameTitle, downloadUrl, 
       freshRequest.on('error', handleError);
       currentDownloadRequest = freshRequest;
     }
-    
+
     function handleDownload(url) {
       const proto = url.startsWith('https') ? https : http;
-      const redirectRequest = proto.get(url, { 
+      const redirectRequest = proto.get(url, {
         timeout: 120000,
         headers: requestHeaders
       }, (res) => {
@@ -598,7 +598,7 @@ ipcMain.handle('download-game', async (event, { gameId, gameTitle, downloadUrl, 
       // Parse content length properly for large files
       let contentLength = response.headers['content-length'];
       let totalSize = 0;
-      
+
       if (isResume && response.headers['content-range']) {
         // Format: bytes start-end/total
         const match = response.headers['content-range'].match(/bytes \d+-\d+\/(\d+)/);
@@ -611,18 +611,18 @@ ipcMain.handle('download-game', async (event, { gameId, gameTitle, downloadUrl, 
           totalSize += startByte;
         }
       }
-      
+
       let downloadedSize = startByte;
       let lastProgressTime = Date.now();
       let lastDownloadedSize = startByte;
       let currentSpeed = 0;
-      
+
       // Use append mode for resume, write mode for fresh
-      const fileStream = fs.createWriteStream(archivePath, { 
+      const fileStream = fs.createWriteStream(archivePath, {
         flags: isResume ? 'a' : 'w',
         highWaterMark: 64 * 1024 * 1024 // 64MB buffer for large files
       });
-      
+
       const downloadData = {
         gameId,
         gameTitle,
@@ -637,7 +637,7 @@ ipcMain.handle('download-game', async (event, { gameId, gameTitle, downloadUrl, 
         archivePath,
         isRar
       };
-      
+
       activeDownloads.set(downloadId, downloadData);
 
       // Remove from paused downloads if resuming
@@ -671,15 +671,15 @@ ipcMain.handle('download-game', async (event, { gameId, gameTitle, downloadUrl, 
       response.on('data', (chunk) => {
         downloadedSize += chunk.length;
         const progress = totalSize > 0 ? (downloadedSize / totalSize) * 100 : 0;
-        
+
         const data = activeDownloads.get(downloadId);
         if (data) {
           data.downloadedSize = downloadedSize;
           data.progress = progress;
         }
-        
+
         // Throttle progress updates to reduce UI strain
-        if (Date.now() - lastProgressTime > 200) {
+        if (Date.now() - lastProgressTime > 500) {
           mainWindow?.webContents.send('download-progress', {
             downloadId,
             gameId,
@@ -700,7 +700,7 @@ ipcMain.handle('download-game', async (event, { gameId, gameTitle, downloadUrl, 
         clearInterval(speedInterval);
         fileStream.close();
         currentDownloadRequest = null;
-        
+
         if (settings.autoExtract) {
           mainWindow?.webContents.send('download-status', {
             downloadId,
@@ -711,11 +711,11 @@ ipcMain.handle('download-game', async (event, { gameId, gameTitle, downloadUrl, 
 
           try {
             await extractArchive(archivePath, gameFolder, isRar);
-            
+
             if (settings.deleteArchiveAfterExtract && fs.existsSync(archivePath)) {
               fs.unlinkSync(archivePath);
             }
-            
+
             completeDownload();
           } catch (extractError) {
             mainWindow?.webContents.send('download-error', {
@@ -730,11 +730,11 @@ ipcMain.handle('download-game', async (event, { gameId, gameTitle, downloadUrl, 
           completeDownload();
         }
       });
-      
+
       function completeDownload() {
         const exePath = findExecutable(gameFolder);
         createInstructionsFile(gameFolder, gameTitle);
-        
+
         const installedGame = {
           gameId,
           gameTitle,
@@ -745,7 +745,7 @@ ipcMain.handle('download-game', async (event, { gameId, gameTitle, downloadUrl, 
           installedAt: new Date().toISOString(),
           size: getFolderSize(gameFolder)
         };
-        
+
         const existingIndex = installedGames.findIndex(g => g.gameId === gameId);
         if (existingIndex !== -1) {
           installedGames[existingIndex] = installedGame;
@@ -753,16 +753,16 @@ ipcMain.handle('download-game', async (event, { gameId, gameTitle, downloadUrl, 
           installedGames.push(installedGame);
         }
         store.set('installedGames', installedGames);
-        
+
         downloadHistory.unshift({
           ...installedGame,
           downloadedAt: new Date().toISOString()
         });
         downloadHistory = downloadHistory.slice(0, 50);
         store.set('downloadHistory', downloadHistory);
-        
+
         activeDownloads.delete(downloadId);
-        
+
         if (settings.notifications && Notification.isSupported()) {
           new Notification({
             title: 'اكتمل التنزيل',
@@ -770,7 +770,7 @@ ipcMain.handle('download-game', async (event, { gameId, gameTitle, downloadUrl, 
             icon: path.join(__dirname, 'assets', 'icon.png')
           }).show();
         }
-        
+
         mainWindow?.webContents.send('download-complete', {
           downloadId,
           gameId,
@@ -778,7 +778,7 @@ ipcMain.handle('download-game', async (event, { gameId, gameTitle, downloadUrl, 
           installPath: gameFolder,
           exePath
         });
-        
+
         resolve({ success: true, installPath: gameFolder, exePath });
       }
 
@@ -812,10 +812,11 @@ ipcMain.handle('download-game', async (event, { gameId, gameTitle, downloadUrl, 
       handleError(new Error('Connection timeout'));
     });
   });
-});
+}
 
-// Pause download
-ipcMain.handle('pause-download', (event, downloadId) => {
+ipcMain.handle('download-game', async (event, args) => {
+  return startDownload(args);
+});
   if (currentDownloadRequest) {
     try { currentDownloadRequest.destroy(); } catch (e) {}
     currentDownloadRequest = null;
@@ -863,10 +864,9 @@ ipcMain.handle('resume-download', async (event, downloadId) => {
   if (!pausedDownload) {
     return { success: false, error: 'التنزيل غير موجود' };
   }
-  
-  // Start download with resume
+
   try {
-    await ipcMain.emit('download-game', {
+    await startDownload({
       gameId: pausedDownload.gameId,
       gameTitle: pausedDownload.gameTitle,
       downloadUrl: pausedDownload.downloadUrl,
@@ -1012,20 +1012,24 @@ ipcMain.handle('get-active-downloads', () => {
     speed: data.status === 'paused' ? 0 : calculateSpeed(data.downloadedSize || 0, data.startTime || Date.now()),
     status: data.status || 'downloading'
   }));
-  
-  // Include paused downloads
-  const paused = pausedDownloads.map(d => ({
-    downloadId: d.downloadId,
-    gameId: d.gameId,
-    gameTitle: d.gameTitle,
-    gameImage: d.gameImage,
-    progress: d.totalSize > 0 ? (d.downloadedSize / d.totalSize) * 100 : 0,
-    downloadedSize: d.downloadedSize || 0,
-    totalSize: d.totalSize || 0,
-    speed: 0,
-    status: 'paused'
-  }));
-  
+
+  const activeIds = new Set(active.map(d => d.downloadId));
+
+  // Include paused downloads that are not already in active map
+  const paused = pausedDownloads
+    .filter(d => !activeIds.has(d.downloadId))
+    .map(d => ({
+      downloadId: d.downloadId,
+      gameId: d.gameId,
+      gameTitle: d.gameTitle,
+      gameImage: d.gameImage,
+      progress: d.totalSize > 0 ? (d.downloadedSize / d.totalSize) * 100 : 0,
+      downloadedSize: d.downloadedSize || 0,
+      totalSize: d.totalSize || 0,
+      speed: 0,
+      status: 'paused'
+    }));
+
   return [...active, ...paused];
 });
 
