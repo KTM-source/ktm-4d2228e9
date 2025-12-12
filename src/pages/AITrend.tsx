@@ -102,7 +102,7 @@ interface TrendHistory {
   fetchedAt: string;
 }
 
-const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-trend-chat`;
+const AI_MODEL = "gpt-5.2-pro";
 
 // Language mapping for Prism
 const languageMap: { [key: string]: string } = {
@@ -842,16 +842,7 @@ export default function AITrend() {
     try {
       const context = allMessages.slice(-4).map(m => `${m.role}: ${m.content.slice(0, 100)}`).join('\n');
       
-      const response = await fetch(CHAT_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-        },
-        body: JSON.stringify({
-          messages: [{
-            role: "user",
-            content: `بناءً على هذه المحادثة:
+      const prompt = `بناءً على هذه المحادثة:
 ${context}
 
 ولد 5 اقتراحات ذكية للمتابعة. كل اقتراح يجب أن يكون:
@@ -869,39 +860,11 @@ ${context}
 - "ما هي ألعابك المفضلة؟" ❌
 - "هل تحب الأكشن؟" ❌
 
-أرجع JSON فقط: ["اقتراح1", "اقتراح2", "اقتراح3", "اقتراح4", "اقتراح5"]`
-          }],
-          userContext: { name: "System", email: "system@ktm.com" },
-        }),
-      });
+أرجع JSON فقط: ["اقتراح1", "اقتراح2", "اقتراح3", "اقتراح4", "اقتراح5"]`;
 
-      if (!response.ok) return;
-
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-      let fullResponse = "";
-
-      if (reader) {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          fullResponse += decoder.decode(value, { stream: true });
-        }
-      }
-
-      const lines = fullResponse.split("\n");
-      let content = "";
+      const response = await puter.ai.chat(prompt, { model: AI_MODEL }) as string;
       
-      for (const line of lines) {
-        if (line.startsWith("data: ") && !line.includes("[DONE]")) {
-          try {
-            const parsed = JSON.parse(line.slice(6));
-            content += parsed.choices?.[0]?.delta?.content || "";
-          } catch {}
-        }
-      }
-
-      const jsonMatch = content.match(/\[[\s\S]*?\]/);
+      const jsonMatch = response.match(/\[[\s\S]*?\]/);
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]);
         setSuggestions(parsed.slice(0, 5));
@@ -916,52 +879,14 @@ ${context}
       const lastMessages = messages.slice(-4);
       const context = lastMessages.map(m => `${m.role}: ${m.content.slice(0, 100)}`).join('\n');
       
-      const response = await fetch(CHAT_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-        },
-        body: JSON.stringify({
-          messages: [{
-            role: "user",
-            content: `بناءً على هذه المحادثة:
+      const prompt = `بناءً على هذه المحادثة:
 ${context}
 
 أنشئ عنوان قصير ومختصر (3-6 كلمات) يصف موضوع المحادثة.
-أرجع العنوان فقط بدون أي علامات أو تنسيق.`
-          }],
-          userContext: { name: "System", email: "system@ktm.com" },
-        }),
-      });
+أرجع العنوان فقط بدون أي علامات أو تنسيق.`;
 
-      if (!response.ok) return;
-
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-      let fullResponse = "";
-
-      if (reader) {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          fullResponse += decoder.decode(value, { stream: true });
-        }
-      }
-
-      const lines = fullResponse.split("\n");
-      let title = "";
+      const title = (await puter.ai.chat(prompt, { model: AI_MODEL }) as string).trim().slice(0, 50);
       
-      for (const line of lines) {
-        if (line.startsWith("data: ") && !line.includes("[DONE]")) {
-          try {
-            const parsed = JSON.parse(line.slice(6));
-            title += parsed.choices?.[0]?.delta?.content || "";
-          } catch {}
-        }
-      }
-
-      title = title.trim().slice(0, 50);
       if (title) {
         await supabase
           .from("ai_conversations")
@@ -1078,16 +1003,7 @@ ${context}
       
       const existingTitles = existingGames?.map(g => g.title.toLowerCase()) || [];
       
-      const response = await fetch(CHAT_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-        },
-        body: JSON.stringify({
-          messages: [{
-            role: "user",
-            content: `ابحث عن 15 لعبة ترند لسنة 2025 صدرت فعلاً.
+      const prompt = `ابحث عن 15 لعبة ترند لسنة 2025 صدرت فعلاً.
 
 استبعد: ${existingTitles.slice(0, 30).join(", ")}
 
@@ -1098,39 +1014,11 @@ https://cdn.akamai.steamstatic.com/steam/apps/[APPID]/header.jpg
 https://images.igdb.com/igdb/image/upload/t_cover_big/[IMAGE_ID].jpg
 
 أرجع JSON فقط:
-[{"name": "Game", "image": "URL", "genres": ["Action"], "platform": "PC"}]`
-          }],
-          userContext: { name: "System", email: "system@ktm.com" },
-        }),
-      });
+[{"name": "Game", "image": "URL", "genres": ["Action"], "platform": "PC"}]`;
 
-      if (!response.ok) throw new Error("Failed");
+      const response = await puter.ai.chat(prompt, { model: AI_MODEL }) as string;
 
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-      let fullResponse = "";
-
-      if (reader) {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          fullResponse += decoder.decode(value, { stream: true });
-        }
-      }
-
-      const lines = fullResponse.split("\n");
-      let content = "";
-      
-      for (const line of lines) {
-        if (line.startsWith("data: ") && !line.includes("[DONE]")) {
-          try {
-            const parsed = JSON.parse(line.slice(6));
-            content += parsed.choices?.[0]?.delta?.content || "";
-          } catch {}
-        }
-      }
-
-      const jsonMatch = content.match(/\[[\s\S]*?\]/);
+      const jsonMatch = response.match(/\[[\s\S]*?\]/);
       if (jsonMatch) {
         const games: TrendingGame[] = JSON.parse(jsonMatch[0]);
         const filtered = games.filter((g: TrendingGame) => 
@@ -1248,80 +1136,75 @@ https://images.igdb.com/igdb/image/upload/t_cover_big/[IMAGE_ID].jpg
     setMessages(prev => [...prev, loadingMsg]);
 
     let assistantContent = "";
+    let isAborted = false;
 
-    // Create abort controller for this request
+    // Create abort handler
     abortControllerRef.current = new AbortController();
+    abortControllerRef.current.signal.addEventListener('abort', () => {
+      isAborted = true;
+    });
 
     try {
       // Get previous messages excluding the loading one
       const previousMessages = messages
         .filter(m => !m.id.startsWith('loading-'))
-        .map(m => ({ role: m.role, content: m.content }));
+        .map(m => ({ role: m.role as "user" | "assistant", content: m.content }));
 
-      const response = await fetch(CHAT_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-        },
-        body: JSON.stringify({
-          messages: [...previousMessages, { role: "user", content: textToSend }],
-          userContext: {
-            name: profile?.first_name || "مستخدم",
-            email: user.email,
-            avatarUrl: profile?.avatar_url,
-          },
-        }),
-        signal: abortControllerRef.current.signal,
+      // Build system prompt
+      const systemPrompt = `أنت مساعد ذكاء اصطناعي متقدم اسمك "KTM AI Trend" تعمل داخل موقع "كَتَم" (KTM) المتخصص في تحميل الألعاب.
+
+**تعليمات مهمة جداً للردود:**
+- لا تكتب JSON مباشرة في ردودك للمستخدم أبداً
+- اكتب بشكل طبيعي ومنسق ومرتب
+- استخدم العناوين والقوائم والتنسيق العربي الواضح
+
+**تعليمات اللغة:**
+- رد دائماً بنفس لغة المستخدم
+
+معلومات المستخدم: ${profile?.first_name || 'مستخدم'}
+
+=== أسلوب الرد ===
+- كن ودوداً ومحترفاً
+- قدم إجابات واضحة ومفيدة
+- رتب المعلومات بشكل جميل`;
+
+      // Prepare messages for Puter AI
+      const chatMessages = [
+        { role: "system" as const, content: systemPrompt },
+        ...previousMessages,
+        { role: "user" as const, content: textToSend }
+      ];
+
+      // Use Puter.js for AI with streaming
+      const response = await puter.ai.chat(chatMessages as any, { 
+        model: AI_MODEL, 
+        stream: true 
       });
 
-      if (!response.ok || !response.body) throw new Error("Failed");
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-
-        let newlineIndex: number;
-        while ((newlineIndex = buffer.indexOf("\n")) !== -1) {
-          let line = buffer.slice(0, newlineIndex);
-          buffer = buffer.slice(newlineIndex + 1);
-
-          if (line.endsWith("\r")) line = line.slice(0, -1);
-          if (line.startsWith(":") || line.trim() === "") continue;
-          if (!line.startsWith("data: ")) continue;
-
-          const jsonStr = line.slice(6).trim();
-          if (jsonStr === "[DONE]") break;
-
-          try {
-            const parsed = JSON.parse(jsonStr);
-            const content = parsed.choices?.[0]?.delta?.content;
-            if (content) {
-              assistantContent += content;
-              setMessages(prev => 
-                prev.map(msg => 
-                  msg.id === loadingMsgId 
-                    ? { ...msg, content: assistantContent }
-                    : msg
-                )
-              );
-            }
-          } catch {}
+      // Handle streaming response
+      for await (const part of response as AsyncIterable<{ text?: string }>) {
+        if (isAborted) break;
+        
+        if (part?.text) {
+          assistantContent += part.text;
+          setMessages(prev => 
+            prev.map(msg => 
+              msg.id === loadingMsgId 
+                ? { ...msg, content: assistantContent }
+                : msg
+            )
+          );
         }
       }
 
       // Save AI message to DB
-      await supabase.from("ai_messages").insert({
-        conversation_id: convId,
-        role: "assistant",
-        content: assistantContent,
-      });
+      if (assistantContent.trim()) {
+        await supabase.from("ai_messages").insert({
+          conversation_id: convId,
+          role: "assistant",
+          content: assistantContent,
+        });
+      }
 
       // Generate title after first exchange
       const allMessages = [...messages, tempUserMsg, { ...loadingMsg, content: assistantContent }];
@@ -1336,8 +1219,16 @@ https://images.igdb.com/igdb/image/upload/t_cover_big/[IMAGE_ID].jpg
       );
 
     } catch (error: any) {
-      // Check if the error is due to abort
-      if (error.name === 'AbortError') {
+      console.error("Error:", error);
+      if (!isAborted) {
+        setMessages(prev => 
+          prev.map(msg => 
+            msg.id === loadingMsgId 
+              ? { ...msg, content: "عذراً، حدث خطأ. حاول مرة أخرى.", isAnimating: false }
+              : msg
+          )
+        );
+      } else {
         // User stopped the generation - keep what we have
         setMessages(prev => 
           prev.map(msg => 
@@ -1354,15 +1245,6 @@ https://images.igdb.com/igdb/image/upload/t_cover_big/[IMAGE_ID].jpg
             content: assistantContent,
           });
         }
-      } else {
-        console.error("Error:", error);
-        setMessages(prev => 
-          prev.map(msg => 
-            msg.id === loadingMsgId 
-              ? { ...msg, content: "عذراً، حدث خطأ. حاول مرة أخرى.", isAnimating: false }
-              : msg
-          )
-        );
       }
     } finally {
       setIsLoading(false);
