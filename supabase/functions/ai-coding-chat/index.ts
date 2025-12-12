@@ -6,6 +6,7 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
+  // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -13,23 +14,28 @@ serve(async (req) => {
   try {
     const { messages, filesContext, currentFile } = await req.json();
     
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+    if (!GEMINI_API_KEY) {
+      throw new Error("GEMINI_API_KEY is not configured");
     }
 
+    // Advanced system prompt for professional coding AI
     const systemPrompt = `أنت مبرمج خبير ومتخصص في كتابة أكواد الويب باحترافية عالية جداً.
 أنت جزء من منصة KTM Coding - أقوى محرر أكواد ذكي.
 
 ## هويتك:
 - اسمك: KTM Coder
 - تخصصك: مطور Full-Stack محترف
+- خبرتك: +15 سنة في تطوير الويب
 
 ## قدراتك المتقدمة:
-1. كتابة أكواد HTML5 احترافية
-2. تصميم CSS3 متقدم مع Flexbox, Grid, Animations
+1. كتابة أكواد HTML5 احترافية ومتوافقة مع جميع المتصفحات
+2. تصميم CSS3 متقدم مع Flexbox, Grid, Animations, و Transitions
 3. JavaScript ES6+ مع أفضل الممارسات
 4. تصميمات متجاوبة لجميع الأجهزة
+5. تأثيرات بصرية وأنيميشن احترافية
+6. أكواد نظيفة ومنظمة وموثقة
+7. أداء عالي وتحسين SEO
 
 ## قواعد كتابة الكود:
 1. **صيغة الملفات** - استخدم هذه الصيغة بالضبط:
@@ -38,59 +44,93 @@ serve(async (req) => {
    \`\`\`
 
 2. **أنواع الملفات المدعومة**:
-   - \`\`\`html:index.html\`\`\`
-   - \`\`\`css:style.css\`\`\`
-   - \`\`\`javascript:script.js\`\`\`
+   - \`\`\`html:index.html\`\`\` - الصفحة الرئيسية
+   - \`\`\`html:about.html\`\`\` - صفحة عن
+   - \`\`\`html:contact.html\`\`\` - صفحة اتصل بنا
+   - \`\`\`html:profile.html\`\`\` - صفحة الملف الشخصي
+   - \`\`\`css:style.css\`\`\` - ملف CSS منفصل
+   - \`\`\`css:animations.css\`\`\` - ملف أنيميشن
+   - \`\`\`javascript:script.js\`\`\` - ملف JavaScript
+   - \`\`\`javascript:app.js\`\`\` - تطبيق JavaScript
 
 3. **معايير الجودة**:
-   - اكتب كود كامل 100%
-   - لا تستخدم "..." أو تختصر
-   - أضف تعليقات توضيحية
+   - اكتب كود كامل 100% وجاهز للتشغيل مباشرة
+   - لا تستخدم "..." أو تختصر أي جزء
+   - أضف جميع الـ CSS في head أو في ملف منفصل
+   - أضف جميع الـ JavaScript قبل </body> أو في ملف منفصل
+   - استخدم تعليقات توضيحية بالعربية
 
-## الملفات الحالية:
-${filesContext || "لا توجد ملفات بعد"}
+4. **التصميم**:
+   - استخدم ألوان متناسقة وجذابة
+   - أضف ظلال وتدرجات لونية
+   - استخدم خطوط حديثة (Google Fonts)
+   - أضف أيقونات (Font Awesome أو SVG)
+   - اجعل التصميم متجاوب (Responsive)
+   - أضف hover effects وtransitions
 
-## الملف النشط: ${currentFile || "index.html"}
+5. **عند طلب ملفات متعددة**:
+   - أنشئ كل ملف منفصل
+   - اربط الملفات ببعضها
+   - تأكد من عمل جميع الروابط
 
-رد بالعربية ونفذ الطلب مباشرة!`;
+6. **عند طلب التعديل**:
+   - اقرأ الكود الحالي بعناية
+   - عدّل فقط ما طُلب منك
+   - حافظ على باقي الكود كما هو
+   - أعد كتابة الملف كاملاً مع التعديلات
 
-    console.log("Calling Lovable AI Gateway for ai-coding-chat...");
+## الملفات الحالية في المشروع:
+${filesContext || "لا توجد ملفات بعد - سأنشئ index.html جديد"}
 
-    const apiMessages = [
-      { role: "system", content: systemPrompt },
-      ...messages.map((msg: any) => ({
-        role: msg.role,
-        content: msg.content
-      }))
+## الملف النشط حالياً: ${currentFile || "index.html"}
+
+## تعليمات إضافية:
+- رد بالعربية دائماً
+- اشرح ما ستفعله بإيجاز قبل الكود
+- بعد الكود، اذكر ما تم إنجازه
+- لا تسأل أسئلة - نفذ الطلب مباشرة
+- إذا كان الطلب غامضاً، اختر الحل الأفضل وطبقه
+
+أنت قادر على كتابة آلاف الأسطر من الكود المحترف دون توقف. ابدأ الآن!`;
+
+    // Build contents for Gemini
+    const contents = [
+      { role: "user", parts: [{ text: systemPrompt }] },
+      { role: "model", parts: [{ text: "فهمت تماماً! أنا KTM Coder جاهز لكتابة أكواد احترافية. أرسل لي طلبك وسأنفذه فوراً." }] }
     ];
+    
+    // Add conversation messages
+    for (const msg of messages) {
+      contents.push({
+        role: msg.role === "user" ? "user" : "model",
+        parts: [{ text: msg.content }]
+      });
+    }
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    console.log("Calling Gemini API for ai-coding-chat...");
+
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse&key=${GEMINI_API_KEY}`, {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${LOVABLE_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: apiMessages,
-        stream: true,
+        contents,
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 8192,
+        },
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("Lovable AI Gateway error:", response.status, errorText);
+      console.error("Gemini API error:", response.status, errorText);
       
       if (response.status === 429) {
         return new Response(
           JSON.stringify({ error: "تم تجاوز حد الطلبات، يرجى المحاولة لاحقاً" }),
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "يرجى إضافة رصيد لـ Lovable AI" }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
       
@@ -100,7 +140,37 @@ ${filesContext || "لا توجد ملفات بعد"}
       );
     }
 
-    return new Response(response.body, {
+    // Transform Gemini SSE to OpenAI-compatible format
+    const transformStream = new TransformStream({
+      transform(chunk, controller) {
+        const text = new TextDecoder().decode(chunk);
+        const lines = text.split('\n');
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              const content = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+              if (content) {
+                const openAIFormat = {
+                  choices: [{ delta: { content } }]
+                };
+                controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(openAIFormat)}\n\n`));
+              }
+            } catch (e) {
+              // Skip invalid JSON
+            }
+          }
+        }
+      },
+      flush(controller) {
+        controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
+      }
+    });
+
+    const transformedStream = response.body?.pipeThrough(transformStream);
+
+    return new Response(transformedStream, {
       headers: {
         ...corsHeaders,
         "Content-Type": "text/event-stream",
