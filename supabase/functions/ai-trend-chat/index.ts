@@ -13,12 +13,12 @@ serve(async (req) => {
 
   try {
     const { messages, userContext } = await req.json();
-    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
-    if (!GEMINI_API_KEY) {
-      throw new Error("GEMINI_API_KEY is not configured");
+    if (!LOVABLE_API_KEY) {
+      throw new Error("LOVABLE_API_KEY is not configured");
     }
 
     const supabase = createClient(SUPABASE_URL!, SUPABASE_SERVICE_ROLE_KEY!);
@@ -102,77 +102,42 @@ ${existingGameTitles.slice(0, 50).join(', ')}
 - قدم إجابات واضحة ومفيدة
 - رتب المعلومات بشكل جميل`;
 
-    console.log("Calling Gemini API for ai-trend-chat...");
+    console.log("Calling Lovable AI for ai-trend-chat...");
 
-    // Build contents for Gemini
-    const contents = [
-      { role: "user", parts: [{ text: systemPrompt }] },
-      { role: "model", parts: [{ text: "مرحباً! أنا KTM AI Trend جاهز لمساعدتك." }] }
-    ];
-    
-    for (const msg of messages) {
-      contents.push({
-        role: msg.role === "user" ? "user" : "model",
-        parts: [{ text: msg.content }]
-      });
-    }
-
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse&key=${GEMINI_API_KEY}`, {
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        contents,
-        generationConfig: {
-          temperature: 0.7,
-          maxOutputTokens: 8192,
-        },
+        model: "google/gemini-2.5-flash",
+        messages: [
+          { role: "system", content: systemPrompt },
+          ...messages,
+        ],
+        stream: true,
       }),
     });
 
     if (!response.ok) {
-      console.error("Gemini API error:", response.status, await response.text());
+      console.error("Lovable AI error:", response.status, await response.text());
       if (response.status === 429) {
         return new Response(JSON.stringify({ error: "تم تجاوز حد الطلبات" }), {
           status: 429,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      throw new Error("Gemini API error");
+      if (response.status === 402) {
+        return new Response(JSON.stringify({ error: "يرجى إضافة رصيد لـ Lovable AI" }), {
+          status: 402,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      throw new Error("Lovable AI error");
     }
 
-    // Transform Gemini SSE to OpenAI-compatible format
-    const transformStream = new TransformStream({
-      transform(chunk, controller) {
-        const text = new TextDecoder().decode(chunk);
-        const lines = text.split('\n');
-        
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(line.slice(6));
-              const content = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-              if (content) {
-                const openAIFormat = {
-                  choices: [{ delta: { content } }]
-                };
-                controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(openAIFormat)}\n\n`));
-              }
-            } catch (e) {
-              // Skip invalid JSON
-            }
-          }
-        }
-      },
-      flush(controller) {
-        controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
-      }
-    });
-
-    const transformedStream = response.body?.pipeThrough(transformStream);
-
-    return new Response(transformedStream, {
+    return new Response(response.body, {
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
   } catch (error) {

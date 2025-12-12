@@ -18,9 +18,9 @@ serve(async (req) => {
     console.log(`Finding similar games for: ${gameTitle}`);
     console.log(`Genre: ${gameGenre}, Category: ${gameCategory}`);
 
-    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
-    if (!GEMINI_API_KEY) {
-      throw new Error("GEMINI_API_KEY is not configured");
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) {
+      throw new Error("LOVABLE_API_KEY is not configured");
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -73,29 +73,26 @@ ${gamesForAnalysis.map(g => `[${g.index}] ${g.title} | التصنيف: ${g.genre
 أجب بـ JSON فقط بهذا الشكل: {"similar": [0, 1, 2, 3, 4, 5]}
 حيث الأرقام هي index الألعاب الأكثر تشابهاً مرتبة من الأكثر تشابهاً إلى الأقل.`;
 
-    console.log("Calling Gemini API for similar games analysis...");
+    console.log("Calling Lovable AI for similar games analysis...");
 
-    const aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+    const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        contents: [
-          { role: "user", parts: [{ text: "أنت محلل ألعاب متخصص. أجب دائماً بـ JSON فقط." }] },
-          { role: "model", parts: [{ text: "فهمت، سأرد بـ JSON فقط." }] },
-          { role: "user", parts: [{ text: prompt }] }
+        model: "google/gemini-2.5-flash",
+        messages: [
+          { role: "system", content: "أنت محلل ألعاب متخصص. أجب دائماً بـ JSON فقط." },
+          { role: "user", content: prompt }
         ],
-        generationConfig: {
-          temperature: 0.3,
-          maxOutputTokens: 256,
-        },
       }),
     });
 
     if (!aiResponse.ok) {
       const errorText = await aiResponse.text();
-      console.error("Gemini API error:", aiResponse.status, errorText);
+      console.error("Lovable AI error:", aiResponse.status, errorText);
       
       // Fallback to basic genre matching
       console.log("Falling back to basic genre matching");
@@ -113,7 +110,7 @@ ${gamesForAnalysis.map(g => `[${g.index}] ${g.title} | التصنيف: ${g.genre
     }
 
     const aiData = await aiResponse.json();
-    const aiContent = aiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    const aiContent = aiData.choices?.[0]?.message?.content || "";
     
     console.log("AI Response:", aiContent);
 
