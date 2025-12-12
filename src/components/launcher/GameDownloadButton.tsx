@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { useElectron } from '@/hooks/useElectron';
 import { toast } from 'sonner';
+import { handleWebDownload, resolveDownloadLink } from '@/lib/downloadHelper';
 
 interface GameDownloadButtonProps {
   gameId: string;
@@ -23,6 +24,7 @@ const GameDownloadButton = ({
   const { isElectron, isGameInstalled, launchGame, downloadGame, activeDownloads, selectExe } = useElectron();
   const [installed, setInstalled] = useState<{ installed: boolean; exePath?: string | null }>({ installed: false });
   const [isLoading, setIsLoading] = useState(false);
+  const [isResolving, setIsResolving] = useState(false);
 
   // Check if game is currently downloading
   const currentDownload = activeDownloads.find((d) => d.gameId === gameId);
@@ -35,17 +37,39 @@ const GameDownloadButton = ({
     }
   }, [isElectron, gameId, isGameInstalled, activeDownloads]);
 
-  // If not in Electron, show regular download link
+  // Handle web download (non-Electron)
+  const handleWebDownloadClick = async () => {
+    if (!downloadUrl) {
+      toast.error('رابط التحميل غير متوفر');
+      return;
+    }
+
+    setIsResolving(true);
+    try {
+      await handleWebDownload(downloadUrl);
+      toast.success('جاري فتح رابط التحميل');
+    } catch (error: any) {
+      toast.error(error.message || 'فشل في استخراج رابط التحميل');
+    }
+    setIsResolving(false);
+  };
+
+  // If not in Electron, show download button that uses API
   if (!isElectron) {
     return (
       <Button
-        asChild
+        onClick={handleWebDownloadClick}
+        disabled={isResolving}
         className={className}
       >
-        <a href={downloadUrl} className="gap-2">
-          <Download className="w-5 h-5" />
-          تحميل الآن
-        </a>
+        <span className="flex items-center gap-2">
+          {isResolving ? (
+            <Loader2 className="w-5 h-5 animate-spin" />
+          ) : (
+            <Download className="w-5 h-5" />
+          )}
+          {isResolving ? 'جاري استخراج الرابط...' : 'تحميل الآن'}
+        </span>
       </Button>
     );
   }
@@ -56,7 +80,9 @@ const GameDownloadButton = ({
       <div className={`space-y-2 ${className}`}>
         <Button disabled className="w-full gap-2">
           <Loader2 className="w-5 h-5 animate-spin" />
-          جاري التحميل {currentDownload.progress.toFixed(0)}%
+          {currentDownload.status === 'resolving' 
+            ? 'جاري استخراج الرابط...' 
+            : `جاري التحميل ${currentDownload.progress.toFixed(0)}%`}
         </Button>
         <Progress value={currentDownload.progress} className="h-2" />
       </div>
@@ -101,7 +127,7 @@ const GameDownloadButton = ({
     );
   }
 
-  // Show download button
+  // Show download button for Electron - will resolve via API then download
   const handleDownload = async () => {
     if (!downloadUrl) {
       toast.error('رابط التحميل غير متوفر');
@@ -110,7 +136,17 @@ const GameDownloadButton = ({
 
     setIsLoading(true);
     try {
-      await downloadGame(gameId, gameTitle, downloadUrl, gameSlug);
+      // Resolve the direct link first
+      const result = await resolveDownloadLink(downloadUrl);
+      
+      if (!result.success || !result.directLink) {
+        toast.error(result.error || 'فشل في استخراج رابط التحميل');
+        setIsLoading(false);
+        return;
+      }
+
+      // Now download using the direct link
+      await downloadGame(gameId, gameTitle, result.directLink, gameSlug);
       toast.success('بدأ التحميل');
     } catch (error) {
       toast.error('فشل في بدء التحميل');
@@ -129,7 +165,7 @@ const GameDownloadButton = ({
       ) : (
         <Download className="w-5 h-5" />
       )}
-      تحميل الآن
+      {isLoading ? 'جاري استخراج الرابط...' : 'تحميل الآن'}
     </Button>
   );
 };

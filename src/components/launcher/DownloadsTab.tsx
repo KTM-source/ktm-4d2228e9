@@ -1,4 +1,4 @@
-import { Download, X, FolderOpen, Clock, CheckCircle2, Loader2, Zap, HardDrive, Gauge, Archive, Play, Pause, PlayCircle } from 'lucide-react';
+import { Download, X, FolderOpen, Clock, CheckCircle2, Loader2, Zap, HardDrive, Gauge, Archive, Play } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useElectron } from '@/hooks/useElectron';
 import type { DownloadProgress, InstalledGame } from '@/hooks/useElectron';
@@ -37,7 +37,7 @@ const formatETA = (downloaded: number, total: number, speed: number) => {
 };
 
 const DownloadsTab = () => {
-  const { activeDownloads, downloadHistory, cancelDownload, openFolder, pauseDownload, resumeDownload } = useElectron();
+  const { activeDownloads, downloadHistory, cancelDownload, openFolder } = useElectron();
 
   const completedDownloads = downloadHistory.filter((item) => {
     const downloadDate = new Date(item.installedAt);
@@ -92,8 +92,6 @@ const DownloadsTab = () => {
                 key={download.downloadId}
                 download={download}
                 onCancel={() => cancelDownload(download.downloadId)}
-                onPause={() => pauseDownload?.(download.downloadId)}
-                onResume={() => resumeDownload?.(download.downloadId)}
               />
             ))}
           </div>
@@ -134,8 +132,7 @@ const StatCard = ({ icon, label, value, color }: { icon: React.ReactNode; label:
   </div>
 );
 
-const ActiveDownloadCard = ({ download, onCancel, onPause, onResume }: { download: DownloadProgress; onCancel: () => void; onPause?: () => void; onResume?: () => void }) => {
-  const isPaused = download.status === 'paused';
+const ActiveDownloadCard = ({ download, onCancel }: { download: DownloadProgress; onCancel: () => void }) => {
   const isExtracting = download.status === 'extracting';
   const isResolving = download.status === 'resolving';
   const progressPercent = download.progress || 0;
@@ -155,8 +152,8 @@ const ActiveDownloadCard = ({ download, onCancel, onPause, onResume }: { downloa
               <div className="flex items-center gap-3 text-sm">
                 <span className="text-muted-foreground">{formatSize(download.downloadedSize)} / {formatSize(download.totalSize)}</span>
                 <span className="text-primary/60">•</span>
-                <span className={cn("font-semibold", isPaused ? "text-yellow-400" : isExtracting ? "text-yellow-400" : isResolving ? "text-blue-400" : "text-green-400")}>
-                  {isPaused ? 'متوقف مؤقتاً' : isExtracting ? 'جاري فك الضغط...' : isResolving ? 'جاري استخراج الرابط...' : formatSpeed(download.speed)}
+                <span className={cn("font-semibold", isExtracting ? "text-yellow-400" : isResolving ? "text-blue-400" : "text-green-400")}>
+                  {isExtracting ? 'جاري فك الضغط...' : isResolving ? 'جاري استخراج الرابط...' : formatSpeed(download.speed)}
                 </span>
               </div>
             </div>
@@ -165,14 +162,8 @@ const ActiveDownloadCard = ({ download, onCancel, onPause, onResume }: { downloa
           <div className="flex items-center gap-2">
             <div className="text-right mr-2">
               <p className="text-xs text-muted-foreground">الوقت المتبقي</p>
-              <p className="text-sm font-mono font-bold text-foreground">{isPaused || isExtracting ? '--:--' : formatETA(download.downloadedSize, download.totalSize, download.speed)}</p>
+              <p className="text-sm font-mono font-bold text-foreground">{isExtracting || isResolving ? '--:--' : formatETA(download.downloadedSize, download.totalSize, download.speed)}</p>
             </div>
-            
-            {!isExtracting && !isResolving && (
-              <Button variant="ghost" size="icon" onClick={isPaused ? onResume : onPause} className={cn("rounded-xl h-10 w-10", isPaused ? "text-green-400 hover:bg-green-500/20" : "text-yellow-400 hover:bg-yellow-500/20")}>
-                {isPaused ? <PlayCircle className="w-5 h-5" /> : <Pause className="w-5 h-5" />}
-              </Button>
-            )}
             
             <Button variant="ghost" size="icon" onClick={onCancel} className="text-destructive hover:bg-destructive/20 rounded-xl h-10 w-10">
               <X className="w-5 h-5" />
@@ -182,12 +173,12 @@ const ActiveDownloadCard = ({ download, onCancel, onPause, onResume }: { downloa
         
         <div className="relative">
           <div className="h-3 bg-muted/50 rounded-full overflow-hidden">
-            <div className={cn("h-full rounded-full transition-all duration-300", isPaused ? "bg-gradient-to-r from-yellow-500 to-orange-500" : isExtracting ? "bg-gradient-to-r from-yellow-500 to-orange-500 animate-pulse" : "bg-gradient-to-r from-primary via-purple-500 to-primary")} style={{ width: `${progressPercent}%` }} />
+            <div className={cn("h-full rounded-full transition-all duration-300", isExtracting ? "bg-gradient-to-r from-yellow-500 to-orange-500 animate-pulse" : isResolving ? "bg-gradient-to-r from-blue-500 to-cyan-500 animate-pulse" : "bg-gradient-to-r from-primary via-purple-500 to-primary")} style={{ width: `${progressPercent}%` }} />
           </div>
           <div className="flex justify-between items-center mt-2">
             <div className="flex items-center gap-2">
-              {isPaused ? <Pause className="w-4 h-4 text-yellow-400" /> : isExtracting ? <Archive className="w-4 h-4 text-yellow-400 animate-pulse" /> : <Zap className="w-4 h-4 text-primary" />}
-              <span className="text-xs text-muted-foreground">{isPaused ? 'إيقاف مؤقت - اضغط استئناف للمتابعة' : isExtracting ? 'جاري فك الضغط...' : 'جاري التنزيل...'}</span>
+              {isExtracting ? <Archive className="w-4 h-4 text-yellow-400 animate-pulse" /> : isResolving ? <Loader2 className="w-4 h-4 text-blue-400 animate-spin" /> : <Zap className="w-4 h-4 text-primary" />}
+              <span className="text-xs text-muted-foreground">{isExtracting ? 'جاري فك الضغط...' : isResolving ? 'جاري استخراج الرابط المباشر...' : 'جاري التنزيل...'}</span>
             </div>
             <span className="text-lg font-bold bg-gradient-to-r from-primary to-purple-400 bg-clip-text text-transparent">{progressPercent.toFixed(1)}%</span>
           </div>
