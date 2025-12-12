@@ -246,7 +246,7 @@ async function verifySingleChallenge(
             "X-Title": "KTM Verification",
           },
           body: JSON.stringify({
-            model: "nex-agi/deepseek-v3.1-nex-n1:free",
+            model: "nousresearch/hermes-3-llama-3.1-405b:free",
             messages: [
               {
                 role: "user",

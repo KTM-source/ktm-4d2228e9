@@ -84,7 +84,7 @@ ${gamesForAnalysis.map(g => `[${g.index}] ${g.title} | التصنيف: ${g.genre
         "X-Title": "KTM Games",
       },
       body: JSON.stringify({
-        model: "nex-agi/deepseek-v3.1-nex-n1:free",
+        model: "nousresearch/hermes-3-llama-3.1-405b:free",
         messages: [
           { role: "system", content: "أنت محلل ألعاب متخصص. أجب دائماً بـ JSON فقط." },
           { role: "user", content: prompt }
