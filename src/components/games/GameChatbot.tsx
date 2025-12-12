@@ -26,7 +26,7 @@ interface GameChatbotProps {
 }
 
 const CHAT_STORAGE_PREFIX = "ktm_chat_";
-const AI_MODEL = "gpt-5.2-pro";
+const AI_MODEL = "gpt-5.2-chat";
 
 const getChatStorageKey = (gameTitle: string) => {
   return `${CHAT_STORAGE_PREFIX}${gameTitle.toLowerCase().replace(/\s+/g, '_')}`;
