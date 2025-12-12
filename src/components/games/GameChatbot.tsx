@@ -25,8 +25,8 @@ interface GameChatbotProps {
   gameContext: GameContext;
 }
 
-const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/game-chat`;
 const CHAT_STORAGE_PREFIX = "ktm_chat_";
+const AI_MODEL = "gpt-5.2-pro";
 
 const getChatStorageKey = (gameTitle: string) => {
   return `${CHAT_STORAGE_PREFIX}${gameTitle.toLowerCase().replace(/\s+/g, '_')}`;
@@ -148,83 +148,81 @@ export const GameChatbot = ({ gameContext }: GameChatbotProps) => {
     incrementStat('chat_messages_sent');
 
     let assistantContent = "";
+    let isAborted = false;
+
+    // Create abort handler
     abortControllerRef.current = new AbortController();
+    abortControllerRef.current.signal.addEventListener('abort', () => {
+      isAborted = true;
+    });
 
     try {
-      const response = await fetch(CHAT_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-        },
-        body: JSON.stringify({
-          messages: [...messages, userMessage],
-          gameContext,
-        }),
-        signal: abortControllerRef.current.signal,
-      });
+      // Build system prompt with game context
+      const systemPrompt = `أنت مساعد ذكاء اصطناعي اسمك "كَتَم AI" تعمل داخل موقع "كَتَم" (KTM) المتخصص في تحميل الألعاب.
+أنت متخصص في لعبة "${gameContext.title}" فقط.
 
-      if (!response.ok || !response.body) {
-        throw new Error("Failed to get response");
-      }
+**معلومات اللعبة:**
+- العنوان: ${gameContext.title}
+- المطور: ${gameContext.developer || 'غير معروف'}
+- التصنيف: ${gameContext.genre || gameContext.category || 'غير محدد'}
+- الحجم: ${gameContext.size}
+- الإصدار: ${gameContext.version}
+- الوصف: ${gameContext.description?.slice(0, 500) || 'لا يوجد وصف'}
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
+**تعليمات:**
+- أجب فقط عن أسئلة تخص هذه اللعبة
+- كن ودوداً ومفيداً
+- رد بنفس لغة المستخدم
+- لا تجب عن أسئلة خارج نطاق اللعبة`;
 
       // Add empty assistant message with typing indicator
       setMessages(prev => [...prev, { role: "assistant", content: "", isTyping: true }]);
       const newMsgIndex = messages.length + 1;
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+      // Prepare messages for Puter AI
+      const chatMessages = [
+        { role: "system" as const, content: systemPrompt },
+        ...messages.map(m => ({ role: m.role as "user" | "assistant", content: m.content })),
+        { role: "user" as const, content: userMessage.content }
+      ];
 
-        buffer += decoder.decode(value, { stream: true });
+      // Use Puter.js for AI with streaming
+      const response = await puter.ai.chat(chatMessages as any, { 
+        model: AI_MODEL, 
+        stream: true 
+      });
 
-        let newlineIndex: number;
-        while ((newlineIndex = buffer.indexOf("\n")) !== -1) {
-          let line = buffer.slice(0, newlineIndex);
-          buffer = buffer.slice(newlineIndex + 1);
-
-          if (line.endsWith("\r")) line = line.slice(0, -1);
-          if (line.startsWith(":") || line.trim() === "") continue;
-          if (!line.startsWith("data: ")) continue;
-
-          const jsonStr = line.slice(6).trim();
-          if (jsonStr === "[DONE]") break;
-
-          try {
-            const parsed = JSON.parse(jsonStr);
-            const content = parsed.choices?.[0]?.delta?.content;
-            if (content) {
-              assistantContent += content;
-              setMessages(prev => {
-                const newMessages = [...prev];
-                newMessages[newMessages.length - 1] = {
-                  role: "assistant",
-                  content: assistantContent,
-                  isTyping: false,
-                };
-                return newMessages;
-              });
-            }
-          } catch {
-            // Incomplete JSON, continue
-          }
+      // Handle streaming response
+      for await (const part of response as AsyncIterable<{ text?: string }>) {
+        if (isAborted) break;
+        
+        if (part?.text) {
+          assistantContent += part.text;
+          setMessages(prev => {
+            const newMessages = [...prev];
+            newMessages[newMessages.length - 1] = {
+              role: "assistant",
+              content: assistantContent,
+              isTyping: false,
+            };
+            return newMessages;
+          });
         }
       }
       
       // Set typing animation for the final message
       setTypingMessageIndex(newMsgIndex);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Chat error:", error);
-      setMessages(prev => [
-        ...prev.slice(0, -1),
-        { role: "assistant", content: "عذراً، حدث خطأ. حاول مرة أخرى." },
-      ]);
+      if (!isAborted) {
+        setMessages(prev => [
+          ...prev.slice(0, -1),
+          { role: "assistant", content: "عذراً، حدث خطأ. حاول مرة أخرى." },
+        ]);
+      }
     } finally {
       setIsLoading(false);
+      abortControllerRef.current = null;
     }
   };
 
