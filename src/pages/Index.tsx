@@ -5,7 +5,10 @@ import { GameCard } from "@/components/games/GameCard";
 import { CategoryCard } from "@/components/games/CategoryCard";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { RecommendedGames } from "@/components/games/RecommendedGames";
+import { LauncherRecommendedGames } from "@/components/games/LauncherRecommendedGames";
+import { LauncherRecentGames } from "@/components/games/LauncherRecentGames";
 import { useGames } from "@/hooks/useGames";
+import { useElectron } from "@/hooks/useElectron";
 import { Button } from "@/components/ui/button";
 import { Sparkles, Zap, Shield, Clock, Loader2 } from "lucide-react";
 import LauncherSection from "@/components/launcher/LauncherSection";
@@ -14,6 +17,7 @@ const GAMES_PER_PAGE = 12;
 
 const Index = () => {
   const { games, categories, isLoading } = useGames();
+  const { isElectron } = useElectron();
   const [visibleGames, setVisibleGames] = useState(GAMES_PER_PAGE);
   
   const recentGames = games.slice(0, visibleGames);
@@ -52,10 +56,10 @@ const Index = () => {
             ].map((feature, index) => (
               <div
                 key={index}
-                className="glass-card p-4 text-center group hover:border-primary/50 transition-all duration-300 opacity-0 animate-slide-up"
-                style={{ animationDelay: `${index * 0.1}s` }}
+                className={`glass-card p-4 text-center group hover:border-primary/50 transition-all duration-300 ${!isElectron ? 'opacity-0 animate-slide-up' : ''}`}
+                style={{ animationDelay: !isElectron ? `${index * 0.1}s` : undefined }}
               >
-                <feature.icon className="w-8 h-8 text-primary mx-auto mb-2 transition-transform duration-300 group-hover:scale-110" />
+                <feature.icon className={`w-8 h-8 text-primary mx-auto mb-2 ${!isElectron ? 'transition-transform duration-300 group-hover:scale-110' : ''}`} />
                 <h3 className="font-bold text-foreground">{feature.title}</h3>
                 <p className="text-xs text-muted-foreground">{feature.desc}</p>
               </div>
@@ -64,40 +68,47 @@ const Index = () => {
         </section>
       </LauncherSection>
 
-      {/* Personalized Recommendations - Lazy loaded */}
+      {/* Personalized Recommendations - Lazy loaded, use simplified version in launcher */}
       <LauncherSection minHeight="400px">
-        <RecommendedGames />
+        {isElectron ? <LauncherRecommendedGames /> : <RecommendedGames />}
       </LauncherSection>
 
-      {/* Recently Added - Lazy loaded */}
+      {/* Recently Added - Lazy loaded, use simplified version in launcher */}
       {recentGames.length > 0 && (
         <LauncherSection minHeight="600px">
-          <section className="container mx-auto px-4 py-16">
-            <SectionHeader
-              title="أحدث الألعاب"
-              subtitle="آخر الألعاب المضافة للمكتبة"
-              href="/recent"
+          {isElectron ? (
+            <LauncherRecentGames 
+              games={recentGames} 
+              hasMore={hasMoreGames} 
+              onLoadMore={loadMore} 
             />
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4 md:gap-6">
-              {recentGames.map((game, index) => (
-                <GameCard key={game.id} game={game} index={index} />
-              ))}
-            </div>
-            
-            {/* Load More Button */}
-            {hasMoreGames && (
-              <div className="flex justify-center mt-10">
-                <Button
-                  onClick={loadMore}
-                  variant="outline"
-                  size="lg"
-                  className="px-12 py-6 text-lg border-primary/50 hover:bg-primary/10 hover:border-primary transition-all duration-300"
-                >
-                  Load More
-                </Button>
+          ) : (
+            <section className="container mx-auto px-4 py-16">
+              <SectionHeader
+                title="أحدث الألعاب"
+                subtitle="آخر الألعاب المضافة للمكتبة"
+                href="/recent"
+              />
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4 md:gap-6">
+                {recentGames.map((game, index) => (
+                  <GameCard key={game.id} game={game} index={index} />
+                ))}
               </div>
-            )}
-          </section>
+              
+              {hasMoreGames && (
+                <div className="flex justify-center mt-10">
+                  <Button
+                    onClick={loadMore}
+                    variant="outline"
+                    size="lg"
+                    className="px-12 py-6 text-lg border-primary/50 hover:bg-primary/10 hover:border-primary transition-all duration-300"
+                  >
+                    Load More
+                  </Button>
+                </div>
+              )}
+            </section>
+          )}
         </LauncherSection>
       )}
 
@@ -131,11 +142,15 @@ const Index = () => {
       {/* Stats Section - Lazy loaded */}
       <LauncherSection minHeight="300px">
         <section className="container mx-auto px-4 py-16">
-          <div className="glass-morphism p-8 md:p-12 text-center relative overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-secondary/5 to-primary/5" />
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-primary/10 rounded-full blur-[100px] animate-pulse-glow" />
+          <div className={`${isElectron ? 'bg-card/50 border border-border/30' : 'glass-morphism'} p-8 md:p-12 text-center relative overflow-hidden rounded-2xl`}>
+            {!isElectron && (
+              <>
+                <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-secondary/5 to-primary/5" />
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-primary/10 rounded-full blur-[100px] animate-pulse-glow" />
+              </>
+            )}
             <div className="relative z-10">
-              <h2 className="font-display text-3xl md:text-4xl font-bold mb-8 gradient-text">
+              <h2 className={`font-display text-3xl md:text-4xl font-bold mb-8 ${isElectron ? 'text-primary' : 'gradient-text'}`}>
                 KTM Game Library
               </h2>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
@@ -145,8 +160,12 @@ const Index = () => {
                   { value: "99%", label: "نسبة النجاح" },
                   { value: "24/7", label: "دعم فني" },
                 ].map((stat, index) => (
-                  <div key={index} className="opacity-0 animate-scale-in" style={{ animationDelay: `${index * 0.15}s` }}>
-                    <div className="font-display text-3xl md:text-4xl font-black text-primary neon-text">
+                  <div 
+                    key={index} 
+                    className={!isElectron ? 'opacity-0 animate-scale-in' : ''}
+                    style={!isElectron ? { animationDelay: `${index * 0.15}s` } : undefined}
+                  >
+                    <div className={`font-display text-3xl md:text-4xl font-black text-primary ${!isElectron ? 'neon-text' : ''}`}>
                       {stat.value}
                     </div>
                     <div className="text-muted-foreground mt-1">{stat.label}</div>
