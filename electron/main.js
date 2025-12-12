@@ -817,6 +817,9 @@ async function startDownload({ gameId, gameTitle, downloadUrl, gameSlug, gameIma
 ipcMain.handle('download-game', async (event, args) => {
   return startDownload(args);
 });
+
+// Pause download
+ipcMain.handle('pause-download', async (event, downloadId) => {
   if (currentDownloadRequest) {
     try { currentDownloadRequest.destroy(); } catch (e) {}
     currentDownloadRequest = null;
