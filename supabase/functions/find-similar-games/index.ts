@@ -18,9 +18,9 @@ serve(async (req) => {
     console.log(`Finding similar games for: ${gameTitle}`);
     console.log(`Genre: ${gameGenre}, Category: ${gameCategory}`);
 
-    const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
-    if (!OPENROUTER_API_KEY) {
-      throw new Error("OPENROUTER_API_KEY is not configured");
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+    if (!GEMINI_API_KEY) {
+      throw new Error("GEMINI_API_KEY is not configured");
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -73,28 +73,29 @@ ${gamesForAnalysis.map(g => `[${g.index}] ${g.title} | التصنيف: ${g.genre
 أجب بـ JSON فقط بهذا الشكل: {"similar": [0, 1, 2, 3, 4, 5]}
 حيث الأرقام هي index الألعاب الأكثر تشابهاً مرتبة من الأكثر تشابهاً إلى الأقل.`;
 
-    console.log("Calling OpenRouter API for similar games analysis...");
+    console.log("Calling Gemini API for similar games analysis...");
 
-    const aiResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    const aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://ktm.lovable.app",
-        "X-Title": "KTM Games",
       },
       body: JSON.stringify({
-        model: "nousresearch/hermes-3-llama-3.1-405b:free",
-        messages: [
-          { role: "system", content: "أنت محلل ألعاب متخصص. أجب دائماً بـ JSON فقط." },
-          { role: "user", content: prompt }
+        contents: [
+          { role: "user", parts: [{ text: "أنت محلل ألعاب متخصص. أجب دائماً بـ JSON فقط." }] },
+          { role: "model", parts: [{ text: "فهمت، سأرد بـ JSON فقط." }] },
+          { role: "user", parts: [{ text: prompt }] }
         ],
+        generationConfig: {
+          temperature: 0.3,
+          maxOutputTokens: 256,
+        },
       }),
     });
 
     if (!aiResponse.ok) {
       const errorText = await aiResponse.text();
-      console.error("OpenRouter API error:", aiResponse.status, errorText);
+      console.error("Gemini API error:", aiResponse.status, errorText);
       
       // Fallback to basic genre matching
       console.log("Falling back to basic genre matching");
@@ -112,7 +113,7 @@ ${gamesForAnalysis.map(g => `[${g.index}] ${g.title} | التصنيف: ${g.genre
     }
 
     const aiData = await aiResponse.json();
-    const aiContent = aiData.choices?.[0]?.message?.content || "";
+    const aiContent = aiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
     
     console.log("AI Response:", aiContent);
 

@@ -14,9 +14,9 @@ serve(async (req) => {
   try {
     const { messages, filesContext, currentFile } = await req.json();
     
-    const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
-    if (!OPENROUTER_API_KEY) {
-      throw new Error("OPENROUTER_API_KEY is not configured");
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+    if (!GEMINI_API_KEY) {
+      throw new Error("GEMINI_API_KEY is not configured");
     }
 
     // Advanced system prompt for professional coding AI
@@ -93,40 +93,44 @@ ${filesContext || "لا توجد ملفات بعد - سأنشئ index.html جد�
 
 أنت قادر على كتابة آلاف الأسطر من الكود المحترف دون توقف. ابدأ الآن!`;
 
-    console.log("Calling OpenRouter API for ai-coding-chat...");
+    // Build contents for Gemini
+    const contents = [
+      { role: "user", parts: [{ text: systemPrompt }] },
+      { role: "model", parts: [{ text: "فهمت تماماً! أنا KTM Coder جاهز لكتابة أكواد احترافية. أرسل لي طلبك وسأنفذه فوراً." }] }
+    ];
+    
+    // Add conversation messages
+    for (const msg of messages) {
+      contents.push({
+        role: msg.role === "user" ? "user" : "model",
+        parts: [{ text: msg.content }]
+      });
+    }
 
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    console.log("Calling Gemini API for ai-coding-chat...");
+
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse&key=${GEMINI_API_KEY}`, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://ktm.lovable.app",
-        "X-Title": "KTM Coding",
       },
       body: JSON.stringify({
-        model: "nousresearch/hermes-3-llama-3.1-405b:free",
-        messages: [
-          { role: "system", content: systemPrompt },
-          ...messages,
-        ],
-        stream: true,
+        contents,
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 8192,
+        },
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("OpenRouter API error:", response.status, errorText);
+      console.error("Gemini API error:", response.status, errorText);
       
       if (response.status === 429) {
         return new Response(
           JSON.stringify({ error: "تم تجاوز حد الطلبات، يرجى المحاولة لاحقاً" }),
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "يرجى إضافة رصيد" }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
       
@@ -136,8 +140,37 @@ ${filesContext || "لا توجد ملفات بعد - سأنشئ index.html جد�
       );
     }
 
-    // Return streaming response
-    return new Response(response.body, {
+    // Transform Gemini SSE to OpenAI-compatible format
+    const transformStream = new TransformStream({
+      transform(chunk, controller) {
+        const text = new TextDecoder().decode(chunk);
+        const lines = text.split('\n');
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              const content = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+              if (content) {
+                const openAIFormat = {
+                  choices: [{ delta: { content } }]
+                };
+                controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(openAIFormat)}\n\n`));
+              }
+            } catch (e) {
+              // Skip invalid JSON
+            }
+          }
+        }
+      },
+      flush(controller) {
+        controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
+      }
+    });
+
+    const transformedStream = response.body?.pipeThrough(transformStream);
+
+    return new Response(transformedStream, {
       headers: {
         ...corsHeaders,
         "Content-Type": "text/event-stream",

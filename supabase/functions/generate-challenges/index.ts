@@ -23,12 +23,12 @@ serve(async (req) => {
   }
 
   try {
-    const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     
-    if (!OPENROUTER_API_KEY) {
-      throw new Error("OPENROUTER_API_KEY is not configured");
+    if (!GEMINI_API_KEY) {
+      throw new Error("GEMINI_API_KEY is not configured");
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey);
@@ -153,33 +153,34 @@ serve(async (req) => {
   }
 ]`;
 
-      console.log("Calling OpenRouter API for challenges...");
+      console.log("Calling Gemini API for challenges...");
       
-      const aiResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      const aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${OPENROUTER_API_KEY}`,
           "Content-Type": "application/json",
-          "HTTP-Referer": "https://ktm.lovable.app",
-          "X-Title": "KTM Challenges",
         },
         body: JSON.stringify({
-          model: "nousresearch/hermes-3-llama-3.1-405b:free",
-          messages: [
-            { role: "system", content: "أنت مساعد يكتب تحديات ألعاب إبداعية وغريبة باللغة العربية. أرجع JSON فقط بدون أي نص إضافي." },
-            { role: "user", content: prompt }
+          contents: [
+            { role: "user", parts: [{ text: "أنت مساعد يكتب تحديات ألعاب إبداعية وغريبة باللغة العربية. أرجع JSON فقط بدون أي نص إضافي." }] },
+            { role: "model", parts: [{ text: "فهمت، سأرد بـ JSON فقط." }] },
+            { role: "user", parts: [{ text: prompt }] }
           ],
+          generationConfig: {
+            temperature: 0.9,
+            maxOutputTokens: 2048,
+          },
         }),
       });
 
       if (!aiResponse.ok) {
         const errorText = await aiResponse.text();
-        console.error("OpenRouter API error:", errorText);
+        console.error("Gemini API error:", errorText);
         continue;
       }
 
       const aiData = await aiResponse.json();
-      let challengesText = aiData.choices?.[0]?.message?.content || "[]";
+      let challengesText = aiData.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
       
       console.log("AI response:", challengesText);
 

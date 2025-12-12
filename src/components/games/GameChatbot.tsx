@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { MessageCircle, Send, X, Bot, User, Loader2, Sparkles, Trash2 } from "lucide-react";
+import { MessageCircle, Send, X, Bot, User, Loader2, Sparkles, Trash2, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useUserStats } from "@/hooks/useUserStats";
@@ -93,6 +93,7 @@ export const GameChatbot = ({ gameContext }: GameChatbotProps) => {
   const [typingMessageIndex, setTypingMessageIndex] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const { incrementStat } = useUserStats();
 
   // Save messages whenever they change
@@ -127,6 +128,14 @@ export const GameChatbot = ({ gameContext }: GameChatbotProps) => {
     }
   }, [isOpen]);
 
+  const stopGeneration = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsLoading(false);
+  }, []);
+
   const sendMessage = async () => {
     if (!input.trim() || isLoading) return;
 
@@ -139,6 +148,7 @@ export const GameChatbot = ({ gameContext }: GameChatbotProps) => {
     incrementStat('chat_messages_sent');
 
     let assistantContent = "";
+    abortControllerRef.current = new AbortController();
 
     try {
       const response = await fetch(CHAT_URL, {
@@ -151,6 +161,7 @@ export const GameChatbot = ({ gameContext }: GameChatbotProps) => {
           messages: [...messages, userMessage],
           gameContext,
         }),
+        signal: abortControllerRef.current.signal,
       });
 
       if (!response.ok || !response.body) {
@@ -392,12 +403,17 @@ export const GameChatbot = ({ gameContext }: GameChatbotProps) => {
               className="flex-1 px-4 py-2.5 bg-muted rounded-xl border-0 focus:ring-2 focus:ring-primary/50 text-sm placeholder:text-muted-foreground transition-all duration-300 focus:scale-[1.02]"
             />
             <Button
-              onClick={sendMessage}
-              disabled={!input.trim() || isLoading}
-              className="rounded-xl bg-gradient-to-r from-primary to-secondary hover:opacity-90 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-primary/30"
+              onClick={isLoading ? stopGeneration : sendMessage}
+              disabled={!input.trim() && !isLoading}
+              className={cn(
+                "rounded-xl transition-all duration-300 hover:scale-105 hover:shadow-lg",
+                isLoading 
+                  ? "bg-destructive hover:bg-destructive/90 hover:shadow-destructive/30" 
+                  : "bg-gradient-to-r from-primary to-secondary hover:opacity-90 hover:shadow-primary/30"
+              )}
             >
               {isLoading ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
+                <Square className="w-5 h-5" />
               ) : (
                 <Send className="w-5 h-5" />
               )}
