@@ -6,18 +6,18 @@ interface LauncherSectionProps {
   children: ReactNode;
   className?: string;
   minHeight?: string;
-  alwaysVisible?: boolean; // For hero/navbar sections
+  alwaysVisible?: boolean; // For navbar only
 }
 
 const LauncherSection = memo(({ 
   children, 
   className,
-  minHeight = '200px',
+  minHeight = '300px',
   alwaysVisible = false 
 }: LauncherSectionProps) => {
   const { elementRef, isInView, isElectron } = useLauncherLazySection();
 
-  // If not in Electron or always visible, render normally
+  // If not in Electron or always visible (navbar), render normally
   if (!isElectron || alwaysVisible) {
     return <div className={className}>{children}</div>;
   }
@@ -26,23 +26,13 @@ const LauncherSection = memo(({
     <div 
       ref={elementRef} 
       className={cn(className)}
-      style={{ minHeight: isInView ? 'auto' : minHeight }}
+      style={{ minHeight }}
     >
       {isInView ? (
-        <div 
-          className="animate-in fade-in-0 slide-in-from-bottom-4 duration-500"
-          style={{ animationFillMode: 'both' }}
-        >
+        <div className="animate-fade-in">
           {children}
         </div>
-      ) : (
-        // Placeholder with minimal DOM
-        <div 
-          className="w-full bg-transparent" 
-          style={{ height: minHeight }}
-          aria-hidden="true"
-        />
-      )}
+      ) : null}
     </div>
   );
 });
