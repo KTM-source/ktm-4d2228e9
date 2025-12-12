@@ -31,16 +31,30 @@ export const HeroCarousel = ({ games }: HeroCarouselProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const imageTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Filter games: rating >= 4.2 AND created in the last week
+  // Filter games: rating >= 4.2 AND created in the last 30 days
+  // If no games match, fallback to top rated games
   const heroGames = useMemo(() => {
-    const oneWeekAgo = new Date();
-    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    const filtered = games.filter(game => {
+    // First try: games with rating >= 4.2 from last 30 days
+    let filtered = games.filter(game => {
       const rating = game.rating || 0;
       const createdAt = new Date(game.created_at);
-      return rating >= 4.2 && createdAt >= oneWeekAgo;
+      return rating >= 4.2 && createdAt >= thirtyDaysAgo;
     });
+
+    // Fallback: if no games match, get top rated games regardless of date
+    if (filtered.length === 0) {
+      filtered = games
+        .filter(game => (game.rating || 0) >= 3.5)
+        .slice(0, 5);
+    }
+
+    // Second fallback: just get the most recent games
+    if (filtered.length === 0) {
+      filtered = games.slice(0, 5);
+    }
 
     return filtered.sort((a, b) => {
       const slugA = a.slug.toLowerCase();
@@ -51,7 +65,7 @@ export const HeroCarousel = ({ games }: HeroCarouselProps) => {
       if (slugA.includes('red-dead-redemption-2')) return -1;
       if (slugB.includes('red-dead-redemption-2')) return 1;
       
-      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      return (b.rating || 0) - (a.rating || 0);
     });
   }, [games]);
 
