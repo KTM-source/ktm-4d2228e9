@@ -102,7 +102,7 @@ interface TrendHistory {
   fetchedAt: string;
 }
 
-const AI_MODEL = "gpt-5.2-pro";
+const AI_MODEL = "gpt-5.2-chat";
 
 // Language mapping for Prism
 const languageMap: { [key: string]: string } = {
