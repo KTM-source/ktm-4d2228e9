@@ -199,32 +199,55 @@ export function useGame(slug: string) {
     try {
       console.log("Fetching AI-powered similar games for:", gameData.title);
       
-      const response = await supabase.functions.invoke('find-similar-games', {
-        body: {
-          gameId: gameData.id,
-          gameTitle: gameData.title,
-          gameGenre: gameData.genre,
-          gameCategory: gameData.category,
-          gameDescription: gameData.description
-        }
-      });
+      // Fetch all games first
+      const { data: allGames } = await supabase
+        .from("games")
+        .select("*")
+        .neq("id", gameData.id)
+        .limit(30);
 
-      if (response.error) {
-        console.error("Error fetching similar games:", response.error);
-        // Fallback to basic matching
-        fallbackSimilarGames(gameData);
+      if (!allGames || allGames.length === 0) {
+        setRelatedGames([]);
         return;
       }
 
-      const { similarGames } = response.data || {};
-      
-      if (similarGames && similarGames.length > 0) {
-        console.log("AI found", similarGames.length, "similar games");
-        setRelatedGames(similarGames as Game[]);
-      } else {
-        // Fallback to basic matching
-        fallbackSimilarGames(gameData);
+      // Use Puter.js for AI analysis
+      const gamesList = allGames.map(g => `${g.title} (${g.genre || g.category})`).join("\n");
+      const prompt = `أنت محلل ألعاب. بناءً على لعبة "${gameData.title}" من نوع "${gameData.genre || gameData.category}":
+${gameData.description?.slice(0, 200) || ''}
+
+من هذه القائمة، اختر أكثر 6 ألعاب مشابهة:
+${gamesList}
+
+أرجع JSON فقط بأسماء الألعاب: ["Game1", "Game2", ...]`;
+
+      try {
+        const response = await (window as any).puter?.ai?.chat(prompt, { model: "gpt-5.2-chat" });
+        
+        if (response) {
+          const jsonMatch = (response as string).match(/\[[\s\S]*?\]/);
+          if (jsonMatch) {
+            const similarTitles: string[] = JSON.parse(jsonMatch[0]);
+            const similarGames = allGames.filter(g => 
+              similarTitles.some(title => 
+                g.title.toLowerCase().includes(title.toLowerCase()) ||
+                title.toLowerCase().includes(g.title.toLowerCase())
+              )
+            ).slice(0, 6);
+            
+            if (similarGames.length > 0) {
+              console.log("AI found", similarGames.length, "similar games");
+              setRelatedGames(similarGames as unknown as Game[]);
+              return;
+            }
+          }
+        }
+      } catch (aiError) {
+        console.log("AI analysis failed, using fallback:", aiError);
       }
+
+      // Fallback to basic matching
+      fallbackSimilarGames(gameData);
     } catch (error) {
       console.error("Error in fetchSimilarGames:", error);
       fallbackSimilarGames(gameData);
