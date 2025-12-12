@@ -65,6 +65,8 @@ interface ElectronAPI {
   clearDownloadHistory: () => Promise<{ success: boolean }>;
   downloadGame: (data: { gameId: string; gameTitle: string; downloadUrl: string; gameSlug: string; gameImage?: string }) => Promise<{ success: boolean; installPath?: string; exePath?: string }>;
   cancelDownload: (downloadId: string) => Promise<{ success: boolean; deleted?: boolean }>;
+  pauseDownload: (downloadId: string) => Promise<{ success: boolean }>;
+  resumeDownload: (downloadId: string) => Promise<{ success: boolean }>;
   getActiveDownloads: () => Promise<DownloadProgress[]>;
   getDownloadHistory: () => Promise<InstalledGame[]>;
   getInstalledGames: () => Promise<InstalledGame[]>;
@@ -74,6 +76,7 @@ interface ElectronAPI {
   openFolder: (path: string) => Promise<boolean>;
   selectExe: (gameId: string) => Promise<{ success: boolean; exePath?: string; error?: string }>;
   scanGamesFolder: (websiteGames: WebsiteGame[]) => Promise<{ success: boolean; games?: InstalledGame[]; error?: string }>;
+  getAppVersion: () => string;
   // Running games & playtime
   getRunningGames: () => Promise<{ gameId: string; gameTitle: string; startTime: number; sessionTime: number }[]>;
   getPlaytimeStats: () => Promise<{ gameId: string; gameTitle: string; totalPlaytime: number; lastPlayed: string; sessions: number }[]>;
@@ -209,6 +212,16 @@ export const useElectron = () => {
     return result;
   }, [isElectron]);
 
+  const pauseDownload = useCallback(async (downloadId: string) => {
+    if (!isElectron) return { success: false };
+    return window.electronAPI?.pauseDownload?.(downloadId) || { success: false };
+  }, [isElectron]);
+
+  const resumeDownload = useCallback(async (downloadId: string) => {
+    if (!isElectron) return { success: false };
+    return window.electronAPI?.resumeDownload?.(downloadId) || { success: false };
+  }, [isElectron]);
+
   const launchGame = useCallback(async (gameId: string, exePath?: string): Promise<LaunchResult | undefined> => {
     if (!isElectron) return { success: false, error: 'Not in Electron' };
     return window.electronAPI?.launchGame({ gameId, exePath });
@@ -261,6 +274,8 @@ export const useElectron = () => {
     clearDownloadHistory,
     downloadGame,
     cancelDownload,
+    pauseDownload,
+    resumeDownload,
     launchGame,
     selectExe,
     uninstallGame,

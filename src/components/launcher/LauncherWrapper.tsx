@@ -5,6 +5,7 @@ import LauncherSettings from './LauncherSettings';
 import DownloadsTab from './DownloadsTab';
 import LibraryTab from './LibraryTab';
 import StatsTab from './StatsTab';
+import UpdateNotification from './UpdateNotification';
 import { useElectron } from '@/hooks/useElectron';
 
 interface LauncherWrapperProps {
@@ -39,6 +40,9 @@ const LauncherWrapper = ({ children }: LauncherWrapperProps) => {
         onTabChange={setActiveTab}
         onSettingsClick={() => setSettingsOpen(true)}
       />
+      
+      {/* Update Notification - Shows on top of everything when update is available */}
+      <UpdateNotification />
       
       <div className="min-h-[calc(100vh-80px)]">
         {activeTab === 'store' && children}
