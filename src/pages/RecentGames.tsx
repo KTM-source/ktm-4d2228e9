@@ -1,10 +1,13 @@
 import { Layout } from "@/components/layout/Layout";
 import { GameCard } from "@/components/games/GameCard";
+import { LauncherGameCard } from "@/components/games/LauncherGameCard";
 import { useGames } from "@/hooks/useGames";
+import { useElectron } from "@/hooks/useElectron";
 import { Clock, Calendar, Loader2 } from "lucide-react";
 
 const RecentGames = () => {
   const { games, isLoading } = useGames();
+  const { isElectron } = useElectron();
   
   // Games are already sorted by created_at desc from the hook
   const today = new Date();
@@ -76,7 +79,11 @@ const RecentGames = () => {
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4 md:gap-6">
               {thisWeek.map((game, index) => (
-                <GameCard key={game.id} game={game} index={index} />
+                isElectron ? (
+                  <LauncherGameCard key={game.id} game={game} />
+                ) : (
+                  <GameCard key={game.id} game={game} index={index} />
+                )
               ))}
             </div>
           </section>
@@ -93,7 +100,11 @@ const RecentGames = () => {
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4 md:gap-6">
               {thisMonth.map((game, index) => (
-                <GameCard key={game.id} game={game} index={index} />
+                isElectron ? (
+                  <LauncherGameCard key={game.id} game={game} />
+                ) : (
+                  <GameCard key={game.id} game={game} index={index} />
+                )
               ))}
             </div>
           </section>
@@ -110,7 +121,11 @@ const RecentGames = () => {
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4 md:gap-6">
               {older.map((game, index) => (
-                <GameCard key={game.id} game={game} index={index} />
+                isElectron ? (
+                  <LauncherGameCard key={game.id} game={game} />
+                ) : (
+                  <GameCard key={game.id} game={game} index={index} />
+                )
               ))}
             </div>
           </section>

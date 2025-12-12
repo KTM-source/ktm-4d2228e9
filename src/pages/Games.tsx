@@ -1,7 +1,9 @@
 import { useState, useMemo } from "react";
 import { Layout } from "@/components/layout/Layout";
 import { GameCard } from "@/components/games/GameCard";
+import { LauncherGameCard } from "@/components/games/LauncherGameCard";
 import { useGames } from "@/hooks/useGames";
+import { useElectron } from "@/hooks/useElectron";
 import { Search, Filter, Grid3X3, LayoutGrid, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
@@ -17,6 +19,7 @@ const sizeRanges = [
 
 const Games = () => {
   const { games, categories, isLoading } = useGames();
+  const { isElectron } = useElectron();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [selectedSize, setSelectedSize] = useState<string>("all");
@@ -159,7 +162,11 @@ const Games = () => {
             )}
           >
             {filteredGames.map((game, index) => (
-              <GameCard key={game.id} game={game} index={index} />
+              isElectron ? (
+                <LauncherGameCard key={game.id} game={game} />
+              ) : (
+                <GameCard key={game.id} game={game} index={index} />
+              )
             ))}
           </div>
 

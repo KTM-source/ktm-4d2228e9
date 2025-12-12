@@ -1,12 +1,15 @@
 import { useMemo } from "react";
 import { Layout } from "@/components/layout/Layout";
 import { GameCard } from "@/components/games/GameCard";
+import { LauncherGameCard } from "@/components/games/LauncherGameCard";
 import { useGames } from "@/hooks/useGames";
+import { useElectron } from "@/hooks/useElectron";
 import { Trophy, Star, TrendingUp, Loader2 } from "lucide-react";
 import { Link } from "react-router-dom";
 
 const TopGames = () => {
   const { games, isLoading } = useGames();
+  const { isElectron } = useElectron();
   
   const topGames = useMemo(() => {
     return [...games].sort((a, b) => {
@@ -59,8 +62,8 @@ const TopGames = () => {
               <Link
                 key={game.id}
                 to={`/${game.slug}`}
-                className="glass-card p-6 text-center relative overflow-hidden animate-slide-up group hover:border-primary/50 transition-all duration-300"
-                style={{ animationDelay: `${index * 0.1}s` }}
+                className={`${isElectron ? 'bg-card border border-border/30' : 'glass-card animate-slide-up group hover:border-primary/50'} p-6 text-center relative overflow-hidden transition-all duration-300 rounded-xl`}
+                style={!isElectron ? { animationDelay: `${index * 0.1}s` } : undefined}
               >
                 {/* Rank Badge */}
                 <div
@@ -78,9 +81,9 @@ const TopGames = () => {
                 <img
                   src={game.image}
                   alt={game.title}
-                  className="w-32 h-32 object-cover rounded-xl mx-auto mb-4 transition-transform duration-300 group-hover:scale-105"
+                  className={`w-32 h-32 object-cover rounded-xl mx-auto mb-4 ${!isElectron ? 'transition-transform duration-300 group-hover:scale-105' : ''}`}
                 />
-                <h3 className="font-display text-xl font-bold text-foreground mb-2 group-hover:text-primary transition-colors">
+                <h3 className={`font-display text-xl font-bold text-foreground mb-2 ${!isElectron ? 'group-hover:text-primary transition-colors' : ''}`}>
                   {game.title}
                 </h3>
                 <div className="flex items-center justify-center gap-1 mb-2">
@@ -118,7 +121,11 @@ const TopGames = () => {
             {/* All Top Games */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4 md:gap-6">
               {topGames.slice(3).map((game, index) => (
-                <GameCard key={game.id} game={game} index={index} />
+                isElectron ? (
+                  <LauncherGameCard key={game.id} game={game} />
+                ) : (
+                  <GameCard key={game.id} game={game} index={index} />
+                )
               ))}
             </div>
           </>
