@@ -113,7 +113,7 @@ ${existingGameTitles.slice(0, 50).join(', ')}
         "X-Title": "KTM Games",
       },
       body: JSON.stringify({
-        model: "nousresearch/hermes-3-llama-3.1-405b:free",
+        model: "nex-agi/deepseek-v3.1-nex-n1:free",
         messages: [{ role: "system", content: systemPrompt }, ...messages],
         stream: true,
       }),
