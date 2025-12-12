@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { X, Download, Sparkles, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useElectron } from '@/hooks/useElectron';
 
-const CURRENT_VERSION = 'v1.0.0'; // This should match the installed launcher version
 const VERSION_CHECK_URL = 'https://ktm.lovable.app/version.txt';
-const DOWNLOAD_URL = 'https://github.com/KTM-Games/launcher/releases/latest/download/KTM-Launcher-Setup.exe';
+const DOWNLOAD_URL = 'https://github.com/KTM-source/ktm/releases/download/v1.0.0/KTM.Launcher-1.1.0.exe';
 
 interface UpdateNotificationProps {
   onClose?: () => void;
@@ -13,17 +13,20 @@ interface UpdateNotificationProps {
 const UpdateNotification = ({ onClose }: UpdateNotificationProps) => {
   const [isVisible, setIsVisible] = useState(false);
   const [latestVersion, setLatestVersion] = useState<string | null>(null);
+  const [currentVersion, setCurrentVersion] = useState<string>('');
   const [isDownloading, setIsDownloading] = useState(false);
-  const [isElectron] = useState(() => !!(window as any).electronAPI?.isElectron);
+  const { isElectron } = useElectron();
 
   useEffect(() => {
+    // Only run on website when accessed from Electron
     if (!isElectron) return;
 
     const checkForUpdates = async () => {
       try {
         // Get current version from Electron
         const api = (window as any).electronAPI;
-        const currentVersion = api?.getAppVersion?.() || CURRENT_VERSION;
+        const installedVersion = api?.getAppVersion?.() || 'v1.0.0';
+        setCurrentVersion(installedVersion);
         
         // Fetch latest version from server
         const response = await fetch(VERSION_CHECK_URL + '?t=' + Date.now(), {
@@ -35,8 +38,11 @@ const UpdateNotification = ({ onClose }: UpdateNotificationProps) => {
         const serverVersion = (await response.text()).trim();
         setLatestVersion(serverVersion);
         
-        // Compare versions
-        if (isNewerVersion(serverVersion, currentVersion)) {
+        // Compare versions - show update if versions are different
+        const normalizedServer = serverVersion.replace(/^v/, '').trim();
+        const normalizedInstalled = installedVersion.replace(/^v/, '').trim();
+        
+        if (normalizedServer !== normalizedInstalled) {
           setIsVisible(true);
         }
       } catch (error) {
@@ -49,32 +55,10 @@ const UpdateNotification = ({ onClose }: UpdateNotificationProps) => {
     return () => clearTimeout(timeout);
   }, [isElectron]);
 
-  const isNewerVersion = (latest: string, current: string): boolean => {
-    const parseVersion = (v: string) => {
-      const match = v.match(/v?(\d+)\.(\d+)\.(\d+)/);
-      if (!match) return [0, 0, 0];
-      return [parseInt(match[1]), parseInt(match[2]), parseInt(match[3])];
-    };
-
-    const [latestMajor, latestMinor, latestPatch] = parseVersion(latest);
-    const [currentMajor, currentMinor, currentPatch] = parseVersion(current);
-
-    if (latestMajor > currentMajor) return true;
-    if (latestMajor === currentMajor && latestMinor > currentMinor) return true;
-    if (latestMajor === currentMajor && latestMinor === currentMinor && latestPatch > currentPatch) return true;
-    
-    return false;
-  };
-
   const handleDownload = () => {
     setIsDownloading(true);
-    // Open download link in external browser
-    const api = (window as any).electronAPI;
-    if (api?.openExternal) {
-      api.openExternal(DOWNLOAD_URL);
-    } else {
-      window.open(DOWNLOAD_URL, '_blank');
-    }
+    // Open download link directly - will trigger file download
+    window.open(DOWNLOAD_URL, '_blank');
     
     setTimeout(() => {
       setIsDownloading(false);
@@ -86,11 +70,12 @@ const UpdateNotification = ({ onClose }: UpdateNotificationProps) => {
     onClose?.();
   };
 
+  // Only show on website when accessed from Electron and update is available
   if (!isVisible || !isElectron) return null;
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="relative w-full max-w-md mx-4 bg-gradient-to-br from-card to-card/95 border border-primary/30 rounded-2xl shadow-2xl shadow-primary/20 overflow-hidden">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
+      <div className="relative w-full max-w-md mx-4 bg-gradient-to-br from-card to-card/95 border border-primary/30 rounded-2xl shadow-2xl shadow-primary/20 overflow-hidden animate-scale-in">
         {/* Decorative background */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className="absolute -top-20 -right-20 w-40 h-40 bg-primary/10 rounded-full blur-3xl" />
@@ -120,7 +105,7 @@ const UpdateNotification = ({ onClose }: UpdateNotificationProps) => {
           {/* Version info */}
           <div className="flex items-center justify-center gap-3 mb-4">
             <span className="px-3 py-1 bg-muted/50 rounded-full text-sm text-muted-foreground">
-              الحالي: {CURRENT_VERSION}
+              الحالي: {currentVersion || 'غير معروف'}
             </span>
             <span className="text-primary">→</span>
             <span className="px-3 py-1 bg-primary/20 rounded-full text-sm text-primary font-bold">
