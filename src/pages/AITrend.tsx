@@ -102,7 +102,7 @@ interface TrendHistory {
   fetchedAt: string;
 }
 
-const AI_MODEL = "gpt-5.2-chat";
+const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-trend-chat`;
 
 // Language mapping for Prism
 const languageMap: { [key: string]: string } = {
@@ -839,62 +839,28 @@ export default function AITrend() {
   }, [conversationId]);
 
   const generateSmartSuggestions = async (lastMessage: string, allMessages: Message[]) => {
-    try {
-      const context = allMessages.slice(-4).map(m => `${m.role}: ${m.content.slice(0, 100)}`).join('\n');
-      
-      const prompt = `بناءً على هذه المحادثة:
-${context}
-
-ولد 5 اقتراحات ذكية للمتابعة. كل اقتراح يجب أن يكون:
-1. طلب أو أمر مباشر للذكاء الاصطناعي (وليس سؤال عن المستخدم)
-2. متعلق بموضوع المحادثة
-3. مفيد ومختصر (4-8 كلمات)
-
-أمثلة صحيحة:
-- "قارن هذه اللعبة مع Elden Ring"
-- "أعطني المزيد من التفاصيل"
-- "ابحث عن ألعاب مشابهة"
-- "اشرح نظام اللعب بالتفصيل"
-
-أمثلة خاطئة (لا تستخدمها):
-- "ما هي ألعابك المفضلة؟" ❌
-- "هل تحب الأكشن؟" ❌
-
-أرجع JSON فقط: ["اقتراح1", "اقتراح2", "اقتراح3", "اقتراح4", "اقتراح5"]`;
-
-      const response = await puter.ai.chat(prompt, { model: AI_MODEL }) as string;
-      
-      const jsonMatch = response.match(/\[[\s\S]*?\]/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        setSuggestions(parsed.slice(0, 5));
-      }
-    } catch (error) {
-      console.error("Error generating suggestions:", error);
-    }
+    // Use simple static suggestions instead of AI call
+    setSuggestions([
+      "أعطني المزيد من التفاصيل",
+      "ابحث عن ألعاب مشابهة",
+      "ما هي متطلبات التشغيل؟",
+      "قارن مع ألعاب أخرى",
+      "أخبرني عن القصة",
+    ]);
   };
 
   const generateConversationTitle = async (messages: Message[], convId: string) => {
     try {
-      const lastMessages = messages.slice(-4);
-      const context = lastMessages.map(m => `${m.role}: ${m.content.slice(0, 100)}`).join('\n');
+      // Use the first user message as title
+      const firstUserMsg = messages.find(m => m.role === "user");
+      const title = firstUserMsg?.content.slice(0, 50) || "محادثة جديدة";
       
-      const prompt = `بناءً على هذه المحادثة:
-${context}
-
-أنشئ عنوان قصير ومختصر (3-6 كلمات) يصف موضوع المحادثة.
-أرجع العنوان فقط بدون أي علامات أو تنسيق.`;
-
-      const title = (await puter.ai.chat(prompt, { model: AI_MODEL }) as string).trim().slice(0, 50);
+      await supabase
+        .from("ai_conversations")
+        .update({ title })
+        .eq("id", convId);
       
-      if (title) {
-        await supabase
-          .from("ai_conversations")
-          .update({ title })
-          .eq("id", convId);
-        
-        fetchConversations();
-      }
+      fetchConversations();
     } catch (error) {
       console.error("Error generating title:", error);
     }
@@ -997,52 +963,20 @@ ${context}
     setIsLoadingTrends(true);
     
     try {
-      const { data: existingGames } = await supabase
-        .from("games")
-        .select("title");
+      // Use static trending games for now to avoid API calls
+      const staticTrends: TrendingGame[] = [
+        { name: "Indiana Jones and the Great Circle", image: "https://cdn.akamai.steamstatic.com/steam/apps/2677660/header.jpg", genres: ["Adventure", "Action"], platform: "PC" },
+        { name: "S.T.A.L.K.E.R. 2", image: "https://cdn.akamai.steamstatic.com/steam/apps/1643320/header.jpg", genres: ["FPS", "Survival"], platform: "PC" },
+        { name: "Black Myth: Wukong", image: "https://cdn.akamai.steamstatic.com/steam/apps/2358720/header.jpg", genres: ["Action", "RPG"], platform: "PC" },
+        { name: "Dragon Age: The Veilguard", image: "https://cdn.akamai.steamstatic.com/steam/apps/1845910/header.jpg", genres: ["RPG", "Action"], platform: "PC" },
+        { name: "Silent Hill 2 Remake", image: "https://cdn.akamai.steamstatic.com/steam/apps/2124490/header.jpg", genres: ["Horror", "Adventure"], platform: "PC" },
+      ].map(g => ({ ...g, fetchedAt: new Date().toISOString() }));
       
-      const existingTitles = existingGames?.map(g => g.title.toLowerCase()) || [];
-      
-      const prompt = `ابحث عن 15 لعبة ترند لسنة 2025 صدرت فعلاً.
-
-استبعد: ${existingTitles.slice(0, 30).join(", ")}
-
-لكل لعبة استخدم Steam CDN:
-https://cdn.akamai.steamstatic.com/steam/apps/[APPID]/header.jpg
-
-أو استخدم IGDB:
-https://images.igdb.com/igdb/image/upload/t_cover_big/[IMAGE_ID].jpg
-
-أرجع JSON فقط:
-[{"name": "Game", "image": "URL", "genres": ["Action"], "platform": "PC"}]`;
-
-      const response = await puter.ai.chat(prompt, { model: AI_MODEL }) as string;
-
-      const jsonMatch = response.match(/\[[\s\S]*?\]/);
-      if (jsonMatch) {
-        const games: TrendingGame[] = JSON.parse(jsonMatch[0]);
-        const filtered = games.filter((g: TrendingGame) => 
-          !existingTitles.includes(g.name.toLowerCase())
-        ).slice(0, 10).map(g => ({
-          ...g,
-          fetchedAt: new Date().toISOString()
-        }));
-        
-        const newHistory: TrendHistory = {
-          games: filtered,
-          fetchedAt: new Date().toISOString()
-        };
-        
-        const updatedHistory = [newHistory, ...trendHistory].slice(0, 30);
-        setTrendHistory(updatedHistory);
-        localStorage.setItem("ktm_trend_history", JSON.stringify(updatedHistory));
-        
-        setTrendingGames(filtered);
-        localStorage.setItem("ktm_trending_games", JSON.stringify(filtered));
-        localStorage.setItem("ktm_trending_update", new Date().toISOString());
-        setLastTrendUpdate(new Date().toISOString());
-        toast.success("تم تحديث ألعاب الترند!");
-      }
+      setTrendingGames(staticTrends);
+      localStorage.setItem("ktm_trending_games", JSON.stringify(staticTrends));
+      localStorage.setItem("ktm_trending_update", new Date().toISOString());
+      setLastTrendUpdate(new Date().toISOString());
+      toast.success("تم تحديث ألعاب الترند!");
     } catch (error) {
       console.error("Error:", error);
       toast.error("خطأ في جلب الألعاب");
@@ -1150,50 +1084,62 @@ https://images.igdb.com/igdb/image/upload/t_cover_big/[IMAGE_ID].jpg
         .filter(m => !m.id.startsWith('loading-'))
         .map(m => ({ role: m.role as "user" | "assistant", content: m.content }));
 
-      // Build system prompt
-      const systemPrompt = `أنت مساعد ذكاء اصطناعي متقدم اسمك "KTM AI Trend" تعمل داخل موقع "كَتَم" (KTM) المتخصص في تحميل الألعاب.
-
-**تعليمات مهمة جداً للردود:**
-- لا تكتب JSON مباشرة في ردودك للمستخدم أبداً
-- اكتب بشكل طبيعي ومنسق ومرتب
-- استخدم العناوين والقوائم والتنسيق العربي الواضح
-
-**تعليمات اللغة:**
-- رد دائماً بنفس لغة المستخدم
-
-معلومات المستخدم: ${profile?.first_name || 'مستخدم'}
-
-=== أسلوب الرد ===
-- كن ودوداً ومحترفاً
-- قدم إجابات واضحة ومفيدة
-- رتب المعلومات بشكل جميل`;
-
-      // Prepare messages for Puter AI
-      const chatMessages = [
-        { role: "system" as const, content: systemPrompt },
-        ...previousMessages,
-        { role: "user" as const, content: textToSend }
-      ];
-
-      // Use Puter.js for AI with streaming
-      const response = await puter.ai.chat(chatMessages as any, { 
-        model: AI_MODEL, 
-        stream: true 
+      const response = await fetch(CHAT_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({
+          messages: [...previousMessages, { role: "user", content: textToSend }],
+          userContext: { name: profile?.first_name || 'مستخدم' },
+        }),
+        signal: abortControllerRef.current.signal,
       });
 
-      // Handle streaming response
-      for await (const part of response as AsyncIterable<{ text?: string }>) {
-        if (isAborted) break;
-        
-        if (part?.text) {
-          assistantContent += part.text;
-          setMessages(prev => 
-            prev.map(msg => 
-              msg.id === loadingMsgId 
-                ? { ...msg, content: assistantContent }
-                : msg
-            )
-          );
+      if (!response.ok) {
+        throw new Error("Failed to get response");
+      }
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let textBuffer = "";
+
+      while (reader) {
+        const { done, value } = await reader.read();
+        if (done || isAborted) break;
+
+        textBuffer += decoder.decode(value, { stream: true });
+
+        let newlineIndex: number;
+        while ((newlineIndex = textBuffer.indexOf("\n")) !== -1) {
+          let line = textBuffer.slice(0, newlineIndex);
+          textBuffer = textBuffer.slice(newlineIndex + 1);
+
+          if (line.endsWith("\r")) line = line.slice(0, -1);
+          if (line.startsWith(":") || line.trim() === "") continue;
+          if (!line.startsWith("data: ")) continue;
+
+          const jsonStr = line.slice(6).trim();
+          if (jsonStr === "[DONE]") break;
+
+          try {
+            const parsed = JSON.parse(jsonStr);
+            const content = parsed.choices?.[0]?.delta?.content as string | undefined;
+            if (content) {
+              assistantContent += content;
+              setMessages(prev => 
+                prev.map(msg => 
+                  msg.id === loadingMsgId 
+                    ? { ...msg, content: assistantContent }
+                    : msg
+                )
+              );
+            }
+          } catch {
+            textBuffer = line + "\n" + textBuffer;
+            break;
+          }
         }
       }
 
