@@ -68,7 +68,7 @@ const GameDownloadButton = ({
           ) : (
             <Download className="w-5 h-5" />
           )}
-          {isResolving ? 'جاري استخراج الرابط...' : 'تحميل الآن'}
+          {isResolving ? 'جاري التنزيل...' : 'تحميل الآن'}
         </span>
       </Button>
     );
@@ -80,9 +80,7 @@ const GameDownloadButton = ({
       <div className={`space-y-2 ${className}`}>
         <Button disabled className="w-full gap-2">
           <Loader2 className="w-5 h-5 animate-spin" />
-          {currentDownload.status === 'resolving' 
-            ? 'جاري استخراج الرابط...' 
-            : `جاري التحميل ${currentDownload.progress.toFixed(0)}%`}
+          جاري التنزيل {currentDownload.progress.toFixed(0)}%
         </Button>
         <Progress value={currentDownload.progress} className="h-2" />
       </div>
@@ -165,7 +163,7 @@ const GameDownloadButton = ({
       ) : (
         <Download className="w-5 h-5" />
       )}
-      {isLoading ? 'جاري استخراج الرابط...' : 'تحميل الآن'}
+      {isLoading ? 'جاري التنزيل...' : 'تحميل الآن'}
     </Button>
   );
 };
