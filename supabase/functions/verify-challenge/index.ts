@@ -12,7 +12,7 @@ serve(async (req) => {
   }
 
   try {
-    const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     
@@ -49,7 +49,7 @@ serve(async (req) => {
       let anyVerified = false;
       let verifiedMessage = "";
       for (const challenge of challenges) {
-        const result = await verifySingleChallenge(supabase, OPENROUTER_API_KEY, userId, challenge, action, actionData);
+        const result = await verifySingleChallenge(supabase, GEMINI_API_KEY, userId, challenge, action, actionData);
         if (result.verified) {
           anyVerified = true;
           verifiedMessage = result.message;
@@ -79,7 +79,7 @@ serve(async (req) => {
       });
     }
 
-    const result = await verifySingleChallenge(supabase, OPENROUTER_API_KEY, userId, challenge, action, actionData);
+    const result = await verifySingleChallenge(supabase, GEMINI_API_KEY, userId, challenge, action, actionData);
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -96,7 +96,7 @@ serve(async (req) => {
 
 async function verifySingleChallenge(
   supabase: any,
-  OPENROUTER_API_KEY: string | undefined,
+  GEMINI_API_KEY: string | undefined,
   userId: string,
   challenge: any,
   action: string,
@@ -214,8 +214,8 @@ async function verifySingleChallenge(
     }
   }
 
-  // Avatar change verification using OpenRouter
-  if (action === "avatar_change" && isAvatarChallenge && actionData?.avatarUrl && OPENROUTER_API_KEY) {
+  // Avatar change verification using Gemini
+  if (action === "avatar_change" && isAvatarChallenge && actionData?.avatarUrl && GEMINI_API_KEY) {
     // Get avatar description from challenge
     let avatarDescription = verificationData.avatar_description || "";
     
@@ -237,20 +237,16 @@ async function verifySingleChallenge(
     
     if (avatarDescription) {
       try {
-        const aiResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        const aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${OPENROUTER_API_KEY}`,
             "Content-Type": "application/json",
-            "HTTP-Referer": "https://ktm.lovable.app",
-            "X-Title": "KTM Verification",
           },
           body: JSON.stringify({
-            model: "nousresearch/hermes-3-llama-3.1-405b:free",
-            messages: [
+            contents: [
               {
                 role: "user",
-                content: `انظر لوصف الصورة التالي وحدد هل يطابق الوصف المطلوب بنسبة 60% أو أكثر:
+                parts: [{ text: `انظر لوصف الصورة التالي وحدد هل يطابق الوصف المطلوب بنسبة 60% أو أكثر:
 
 الوصف المطلوب: "${avatarDescription}"
 
@@ -258,15 +254,19 @@ async function verifySingleChallenge(
 
 رابط الصورة: ${actionData.avatarUrl}
 
-أجب بكلمة واحدة فقط: "نعم" إذا تتوقع تطابق الوصف، أو "لا" إذا لا يتطابق.`
+أجب بكلمة واحدة فقط: "نعم" إذا تتوقع تطابق الوصف، أو "لا" إذا لا يتطابق.` }]
               }
             ],
+            generationConfig: {
+              temperature: 0.3,
+              maxOutputTokens: 10,
+            },
           }),
         });
 
         if (aiResponse.ok) {
           const aiData = await aiResponse.json();
-          const response = aiData.choices?.[0]?.message?.content?.toLowerCase() || "";
+          const response = aiData.candidates?.[0]?.content?.parts?.[0]?.text?.toLowerCase() || "";
           console.log("AI avatar response:", response);
           
           if (response.includes("نعم") || response.includes("yes")) {
