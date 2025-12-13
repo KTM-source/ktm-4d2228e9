@@ -148,8 +148,24 @@ export const GameTranslation = ({
         },
       });
 
-      if (error || !data?.success) {
-        throw new Error(data?.error || "فشل في الترجمة");
+      if (error) {
+        // Check for specific error types
+        if (error.message?.includes("402") || error.message?.includes("payment")) {
+          toast.error("نفذ رصيد الترجمة، يرجى إضافة رصيد من إعدادات Lovable");
+          setSelectedLanguage(null);
+          return;
+        }
+        throw new Error("فشل في الترجمة");
+      }
+      
+      if (!data?.success) {
+        const errorMsg = data?.error || "فشل في الترجمة";
+        if (errorMsg.includes("رصيد") || errorMsg.includes("402")) {
+          toast.error(errorMsg);
+          setSelectedLanguage(null);
+          return;
+        }
+        throw new Error(errorMsg);
       }
 
       const newTranslation = {
