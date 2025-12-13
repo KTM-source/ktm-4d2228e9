@@ -32,3 +32,9 @@ verify_jwt = false
 
 [functions.ai-coding-chat]
 verify_jwt = false
+
+[functions.generate-game-review]
+verify_jwt = false
+
+[functions.translate-game-content]
+verify_jwt = false
