@@ -1079,8 +1079,10 @@ export default function AITrend() {
     });
 
     try {
-      // Get previous messages excluding the loading one
-      const previousMessages = messages
+      // CRITICAL FIX: Use functional update to get current messages state
+      // and include the new user message that was just added
+      const currentMessages = [...messages, tempUserMsg];
+      const previousMessages = currentMessages
         .filter(m => !m.id.startsWith('loading-'))
         .map(m => ({ role: m.role as "user" | "assistant", content: m.content }));
 
@@ -1091,7 +1093,7 @@ export default function AITrend() {
           Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
         body: JSON.stringify({
-          messages: [...previousMessages, { role: "user", content: textToSend }],
+          messages: previousMessages,
           userContext: { name: profile?.first_name || 'مستخدم' },
         }),
         signal: abortControllerRef.current.signal,
