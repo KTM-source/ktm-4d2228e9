@@ -1727,7 +1727,7 @@ export default function AITrend() {
                   )}
                 </div>
                 <p className="text-center text-xs text-gray-500 mt-3">
-                  KTM AI • Gemini AI • خصوصيتك محفوظة
+                  KTM AI • خصوصيتك محفوظة
                 </p>
               </div>
             </div>
