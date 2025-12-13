@@ -672,6 +672,17 @@ export default function Admin() {
                             className="glass-card border-border/50"
                           />
                         </div>
+
+                        {/* AI Review Button */}
+                        <AIReviewButton
+                          title={form.title}
+                          description={form.description}
+                          genre={form.genre}
+                          developer={form.developer}
+                          existingReview={form.ai_review || null}
+                          reviewStatus={editingId ? (games.find(g => g.id === editingId)?.ai_review_status || null) : null}
+                          onReviewGenerated={(review) => setForm({ ...form, ai_review: review })}
+                        />
                       </div>
 
                       {/* System Requirements */}

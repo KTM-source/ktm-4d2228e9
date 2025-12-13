@@ -189,8 +189,8 @@ const GameDetails = () => {
                 <GameTranslation
                   gameId={game.id}
                   description={game.description}
-                  review={(game as any).ai_review}
-                  translations={(game as any).translations || {}}
+                  review={game.ai_review}
+                  translations={game.translations || {}}
                 />
 
                 <div className="text-muted-foreground leading-relaxed mb-8 text-lg">
@@ -198,8 +198,8 @@ const GameDetails = () => {
                 </div>
 
                 {/* AI Review Section */}
-                {(game as any).ai_review && (
-                  <GameAIReview review={(game as any).ai_review} className="mb-8" />
+                {game.ai_review && (
+                  <GameAIReview review={game.ai_review} className="mb-8" />
                 )}
 
                 {/* Trailer Player */}

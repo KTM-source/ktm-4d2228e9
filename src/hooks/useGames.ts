@@ -38,6 +38,9 @@ export interface Game {
   platforms: string[] | null;
   created_at: string;
   updated_at: string;
+  ai_review: string | null;
+  ai_review_status: string | null;
+  translations: Record<string, { description: string; review?: string }> | null;
 }
 
 export interface Category {
