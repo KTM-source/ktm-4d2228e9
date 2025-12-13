@@ -60,12 +60,31 @@ const LANGUAGES = [
   { code: "eu", name: "الباسكية", native: "Euskara" },
 ];
 
+// Get stored language for a game from localStorage
+const getStoredLanguage = (gameId: string): string | null => {
+  try {
+    const stored = localStorage.getItem(`game_lang_${gameId}`);
+    return stored;
+  } catch {
+    return null;
+  }
+};
+
+// Store language preference for a game
+const storeLanguage = (gameId: string, langCode: string) => {
+  try {
+    localStorage.setItem(`game_lang_${gameId}`, langCode);
+  } catch {
+    // Ignore storage errors
+  }
+};
+
 interface GameTranslationProps {
   gameId: string;
   description: string;
   review?: string | null;
-  translations?: Record<string, any>;
-  onTranslated?: (translatedDescription: string, translatedReview?: string) => void;
+  translations?: Record<string, { description: string; review?: string | null }>;
+  onTranslated?: (translatedDescription: string, translatedReview?: string | null) => void;
 }
 
 export const GameTranslation = ({ 
@@ -77,48 +96,41 @@ export const GameTranslation = ({
 }: GameTranslationProps) => {
   const [selectedLanguage, setSelectedLanguage] = useState<string | null>(null);
   const [isTranslating, setIsTranslating] = useState(false);
-  const [translatedContent, setTranslatedContent] = useState<{
-    description: string;
-    review?: string;
-  } | null>(null);
+  const [localTranslations, setLocalTranslations] = useState<Record<string, { description: string; review?: string | null }>>(translations);
 
-  // Check for cached translation
+  // Load stored language preference on mount
   useEffect(() => {
-    if (selectedLanguage && translations[selectedLanguage]) {
-      setTranslatedContent({
-        description: translations[selectedLanguage].description,
-        review: translations[selectedLanguage].review,
-      });
-      onTranslated?.(
-        translations[selectedLanguage].description,
-        translations[selectedLanguage].review
-      );
+    const storedLang = getStoredLanguage(gameId);
+    if (storedLang && storedLang !== selectedLanguage) {
+      // Check if we have cached translation
+      const cachedTranslation = localTranslations[storedLang];
+      if (cachedTranslation) {
+        setSelectedLanguage(storedLang);
+        onTranslated?.(cachedTranslation.description, cachedTranslation.review);
+      } else {
+        // Auto-translate to stored language
+        handleTranslate(storedLang);
+      }
     }
-  }, [selectedLanguage, translations]);
+  }, [gameId]);
+
+  // Update local translations when prop changes
+  useEffect(() => {
+    setLocalTranslations(translations);
+  }, [translations]);
 
   const handleTranslate = async (langCode: string) => {
     const language = LANGUAGES.find(l => l.code === langCode);
     if (!language) return;
 
-    // If Arabic is selected, reset to original
-    if (langCode === 'ar') {
-      setSelectedLanguage(null);
-      setTranslatedContent(null);
-      onTranslated?.(description, review || undefined);
-      return;
-    }
-
     setSelectedLanguage(langCode);
+    storeLanguage(gameId, langCode);
 
-    // Check if already cached
-    if (translations[langCode]) {
-      setTranslatedContent({
-        description: translations[langCode].description,
-        review: translations[langCode].review,
-      });
+    // Check if already cached locally or in database
+    if (localTranslations[langCode]) {
       onTranslated?.(
-        translations[langCode].description,
-        translations[langCode].review
+        localTranslations[langCode].description,
+        localTranslations[langCode].review
       );
       toast.success(`تم تحميل الترجمة ${language.name} من الذاكرة`);
       return;
@@ -140,24 +152,28 @@ export const GameTranslation = ({
         throw new Error(data?.error || "فشل في الترجمة");
       }
 
-      // Save translation to database
-      const newTranslations = {
-        ...translations,
-        [langCode]: {
-          description: data.translatedDescription,
-          review: data.translatedReview || null,
-        },
+      const newTranslation = {
+        description: data.translatedDescription,
+        review: data.translatedReview || null,
       };
 
-      await supabase
-        .from("games")
-        .update({ translations: newTranslations })
-        .eq("id", gameId);
+      // Update local state
+      const updatedTranslations = {
+        ...localTranslations,
+        [langCode]: newTranslation,
+      };
+      setLocalTranslations(updatedTranslations);
 
-      setTranslatedContent({
-        description: data.translatedDescription,
-        review: data.translatedReview,
-      });
+      // Save translation to database for future users
+      try {
+        await supabase
+          .from("games")
+          .update({ translations: updatedTranslations })
+          .eq("id", gameId);
+      } catch (dbError) {
+        console.error("Failed to save translation to DB:", dbError);
+        // Continue anyway - local state is updated
+      }
 
       onTranslated?.(data.translatedDescription, data.translatedReview);
       toast.success(`تمت الترجمة إلى ${language.name} بنجاح`);
@@ -225,7 +241,7 @@ export const GameTranslation = ({
               {selectedLanguage === lang.code && (
                 <Check className="w-4 h-4 text-primary" />
               )}
-              {translations[lang.code] && selectedLanguage !== lang.code && (
+              {localTranslations[lang.code] && selectedLanguage !== lang.code && (
                 <span className="text-xs text-muted-foreground">محفوظة</span>
               )}
             </DropdownMenuItem>
