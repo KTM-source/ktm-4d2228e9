@@ -28,13 +28,23 @@ serve(async (req) => {
     console.log(`Translating content to: ${targetLanguage} (${languageCode})`);
 
     // Translate description
-    const descSystemPrompt = `You are a professional translator. Translate the following game description to ${targetLanguage}. 
-Rules:
-- Keep all Markdown formatting intact (bold, headers, lists, tables)
-- Do NOT add any headers or labels like "Description:" or "## Description"
-- Do NOT translate game names or famous character names
-- Keep URLs and links unchanged
-- Return ONLY the translated text, nothing else`;
+    const descSystemPrompt = `You are a professional translator specializing in game content. Translate the following text to ${targetLanguage}.
+
+CRITICAL RULES:
+1. PRESERVE ALL MARKDOWN FORMATTING EXACTLY:
+   - Keep **bold** as **bold**
+   - Keep ## headers as ## headers
+   - Keep bullet points (- or •) as bullet points
+   - MOST IMPORTANT: Keep tables in EXACT Markdown format with | pipes
+2. Do NOT add any new headers or labels
+3. Do NOT translate game names, character names, or technical terms
+4. Keep URLs, links, and code unchanged
+5. Return ONLY the translated text with preserved formatting
+
+Example table format to preserve:
+| Column1 | Column2 | Column3 |
+|---------|---------|---------|
+| Value1 | Value2 | Value3 |`;
 
     const descResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -46,7 +56,7 @@ Rules:
         model: "google/gemini-2.5-flash",
         messages: [
           { role: "system", content: descSystemPrompt },
-          { role: "user", content: description },
+          { role: "user", content: `Translate this game description to ${targetLanguage}:\n\n${description}` },
         ],
         max_tokens: 4000,
       }),
@@ -63,6 +73,13 @@ Rules:
         );
       }
       
+      if (descResponse.status === 402) {
+        return new Response(
+          JSON.stringify({ success: false, error: "نفذ رصيد الترجمة، يرجى إضافة رصيد من إعدادات Lovable" }),
+          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
       throw new Error(`Translation API error: ${descResponse.status}`);
     }
 
@@ -71,8 +88,9 @@ Rules:
     
     // Clean up any unwanted headers the AI might have added
     translatedDescription = translatedDescription
-      .replace(/^#+ ?(Description|الوصف|Descripción|Beschreibung|Descrição|Descrizione|説明|描述|Описание|Contenu à traduire):?\s*/gim, '')
+      .replace(/^#+ ?(Description|الوصف|Descripción|Beschreibung|Descrição|Descrizione|説明|描述|Описание|Contenu à traduire):?\s*\n?/gim, '')
       .replace(/^#+ ?.*traduire.*\n*/gim, '')
+      .replace(/^(Here'?s? (is )?the translation|Voici la traduction|Aquí está la traducción).*:\s*\n?/gim, '')
       .trim();
 
     console.log("Description translated, length:", translatedDescription.length);
@@ -80,13 +98,24 @@ Rules:
     // Translate review if exists
     let translatedReview = null;
     if (review && review.trim().length > 0) {
-      const reviewSystemPrompt = `You are a professional translator. Translate the following game review to ${targetLanguage}.
-Rules:
-- Keep all Markdown formatting intact (bold, headers, lists, tables, emojis)
-- Do NOT add any headers or labels like "Review:" or "## Review"
-- Do NOT translate game names or famous character names
-- Keep URLs and links unchanged
-- Return ONLY the translated text, nothing else`;
+      const reviewSystemPrompt = `You are a professional translator specializing in game reviews. Translate the following game review to ${targetLanguage}.
+
+CRITICAL RULES - MUST FOLLOW:
+1. PRESERVE ALL MARKDOWN FORMATTING EXACTLY AS IS:
+   - Keep **bold text** format
+   - Keep ## and ### headers format
+   - Keep bullet points (- or • or *) format
+   - Keep numbered lists (1. 2. 3.) format
+   - TABLES ARE CRITICAL: Keep Markdown tables with | pipes EXACTLY like this:
+     | Header1 | Header2 | Header3 |
+     |---------|---------|---------|
+     | Cell1 | Cell2 | Cell3 |
+2. Do NOT add any labels like "Review:" or "Translation:"
+3. Do NOT translate game names, character names
+4. Keep emojis as they are
+5. Return ONLY the translated text with ALL formatting preserved
+
+The table format MUST be preserved with pipes | and dashes ---`;
 
       const reviewResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
@@ -98,9 +127,9 @@ Rules:
           model: "google/gemini-2.5-flash",
           messages: [
             { role: "system", content: reviewSystemPrompt },
-            { role: "user", content: review },
+            { role: "user", content: `Translate this game review to ${targetLanguage}, preserving ALL Markdown formatting including tables:\n\n${review}` },
           ],
-          max_tokens: 6000,
+          max_tokens: 8000,
         }),
       });
 
@@ -111,11 +140,17 @@ Rules:
         // Clean up any unwanted headers
         if (translatedReview) {
           translatedReview = translatedReview
-            .replace(/^#+ ?(Review|المراجعة|Critique|Reseña|Rezension|Revisão|Recensione|レビュー|评论|Обзор):?\s*/gim, '')
+            .replace(/^#+ ?(Review|المراجعة|Critique|Reseña|Rezension|Revisão|Recensione|レビュー|评论|Обзор):?\s*\n?/gim, '')
+            .replace(/^(Here'?s? (is )?the translation|Voici la traduction|Aquí está la traducción).*:\s*\n?/gim, '')
             .trim();
         }
         
         console.log("Review translated, length:", translatedReview?.length || 0);
+      } else if (reviewResponse.status === 402) {
+        return new Response(
+          JSON.stringify({ success: false, error: "نفذ رصيد الترجمة، يرجى إضافة رصيد من إعدادات Lovable" }),
+          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
     }
 
