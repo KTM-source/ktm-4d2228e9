@@ -27,26 +27,16 @@ serve(async (req) => {
 
     console.log(`Translating content to: ${targetLanguage} (${languageCode})`);
 
-    const systemPrompt = `أنت مترجم محترف متخصص في ترجمة محتوى الألعاب. قم بترجمة المحتوى التالي إلى ${targetLanguage} بشكل دقيق واحترافي.
+    // Translate description
+    const descSystemPrompt = `You are a professional translator. Translate the following game description to ${targetLanguage}. 
+Rules:
+- Keep all Markdown formatting intact (bold, headers, lists, tables)
+- Do NOT add any headers or labels like "Description:" or "## Description"
+- Do NOT translate game names or famous character names
+- Keep URLs and links unchanged
+- Return ONLY the translated text, nothing else`;
 
-قواعد الترجمة:
-- حافظ على التنسيق الأصلي (العناوين، الجداول، القوائم، الرموز التعبيرية)
-- لا تترجم أسماء الألعاب أو الشخصيات المشهورة
-- حافظ على أي كود أو روابط كما هي
-- اجعل الترجمة طبيعية وسلسة في اللغة المستهدفة
-- حافظ على بنية Markdown كاملة
-
-قم بإرجاع النص المترجم فقط بدون أي تعليقات إضافية.`;
-
-    const contentToTranslate = `# المحتوى للترجمة:
-
-## الوصف:
-${description}
-
-${review ? `## المراجعة:
-${review}` : ''}`;
-
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const descResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${LOVABLE_API_KEY}`,
@@ -55,57 +45,85 @@ ${review}` : ''}`;
       body: JSON.stringify({
         model: "google/gemini-2.5-flash",
         messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: contentToTranslate },
+          { role: "system", content: descSystemPrompt },
+          { role: "user", content: description },
         ],
-        max_tokens: 6000,
+        max_tokens: 4000,
       }),
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Translation API error:", response.status, errorText);
+    if (!descResponse.ok) {
+      const errorText = await descResponse.text();
+      console.error("Translation API error:", descResponse.status, errorText);
       
-      if (response.status === 429) {
+      if (descResponse.status === 429) {
         return new Response(
           JSON.stringify({ success: false, error: "تم تجاوز حد الطلبات، حاول لاحقاً" }),
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
       
-      throw new Error(`Translation API error: ${response.status}`);
+      throw new Error(`Translation API error: ${descResponse.status}`);
     }
 
-    const data = await response.json();
-    const translatedContent = data.choices?.[0]?.message?.content || "";
-
-    console.log("Translation completed, length:", translatedContent.length);
-
-    // Parse the translated content to separate description and review
-    let translatedDescription = translatedContent;
-    let translatedReview = "";
-
-    const reviewMatch = translatedContent.match(/## (?:المراجعة|Review|Critique|Reseña|Rezension|Revisão|Recensione|レビュー|评论|Обзор):\s*([\s\S]*)/i);
-    const descMatch = translatedContent.match(/## (?:الوصف|Description|Descripción|Beschreibung|Descrição|Descrizione|説明|描述|Описание):\s*([\s\S]*?)(?=## |$)/i);
-
-    if (descMatch && descMatch[1]) {
-      translatedDescription = descMatch[1].trim();
-    }
+    const descData = await descResponse.json();
+    let translatedDescription = descData.choices?.[0]?.message?.content || "";
     
-    if (reviewMatch && reviewMatch[1]) {
-      translatedReview = reviewMatch[1].trim();
-    }
+    // Clean up any unwanted headers the AI might have added
+    translatedDescription = translatedDescription
+      .replace(/^#+ ?(Description|الوصف|Descripción|Beschreibung|Descrição|Descrizione|説明|描述|Описание|Contenu à traduire):?\s*/gim, '')
+      .replace(/^#+ ?.*traduire.*\n*/gim, '')
+      .trim();
 
-    // If parsing didn't work well, use the full content as description
-    if (translatedDescription.length < 50 && translatedContent.length > 100) {
-      translatedDescription = translatedContent;
+    console.log("Description translated, length:", translatedDescription.length);
+
+    // Translate review if exists
+    let translatedReview = null;
+    if (review && review.trim().length > 0) {
+      const reviewSystemPrompt = `You are a professional translator. Translate the following game review to ${targetLanguage}.
+Rules:
+- Keep all Markdown formatting intact (bold, headers, lists, tables, emojis)
+- Do NOT add any headers or labels like "Review:" or "## Review"
+- Do NOT translate game names or famous character names
+- Keep URLs and links unchanged
+- Return ONLY the translated text, nothing else`;
+
+      const reviewResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          messages: [
+            { role: "system", content: reviewSystemPrompt },
+            { role: "user", content: review },
+          ],
+          max_tokens: 6000,
+        }),
+      });
+
+      if (reviewResponse.ok) {
+        const reviewData = await reviewResponse.json();
+        translatedReview = reviewData.choices?.[0]?.message?.content || null;
+        
+        // Clean up any unwanted headers
+        if (translatedReview) {
+          translatedReview = translatedReview
+            .replace(/^#+ ?(Review|المراجعة|Critique|Reseña|Rezension|Revisão|Recensione|レビュー|评论|Обзор):?\s*/gim, '')
+            .trim();
+        }
+        
+        console.log("Review translated, length:", translatedReview?.length || 0);
+      }
     }
 
     return new Response(
       JSON.stringify({ 
         success: true, 
         translatedDescription,
-        translatedReview: translatedReview || null
+        translatedReview
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
