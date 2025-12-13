@@ -826,17 +826,17 @@ export default function AITrend() {
     }
   }, [isAuthenticated, user]);
 
-  // Load messages when conversation changes
   useEffect(() => {
     if (conversationId) {
       setCurrentConversation(conversationId);
-      fetchMessages(conversationId);
-      setPendingConversation(false);
+      if (!pendingConversation) {
+        fetchMessages(conversationId);
+      }
     } else {
       setCurrentConversation(null);
       setMessages([]);
     }
-  }, [conversationId]);
+  }, [conversationId, pendingConversation]);
 
   const generateSmartSuggestions = async (lastMessage: string, allMessages: Message[]) => {
     // Use simple static suggestions instead of AI call
@@ -1047,7 +1047,6 @@ export default function AITrend() {
       setCurrentConversation(convId);
       setConversations(prev => [data, ...prev]);
       navigate(`/ktm/ai/trend/${convId}`, { replace: true });
-      setPendingConversation(false);
     }
 
     // Save user message to DB
@@ -1197,6 +1196,7 @@ export default function AITrend() {
     } finally {
       setIsLoading(false);
       abortControllerRef.current = null;
+      setPendingConversation(false);
     }
   };
 
@@ -1382,7 +1382,7 @@ export default function AITrend() {
             <div key={conv.id}
               className={cn("group flex items-center gap-2.5 p-2.5 rounded-xl cursor-pointer transition-all duration-300",
                 currentConversation === conv.id ? "bg-gradient-to-r from-emerald-500/15 to-cyan-500/15 border border-emerald-500/30" : "hover:bg-white/5")}
-              onClick={() => navigate(`/ktm/ai/trend/${conv.id}`)}>
+              onClick={() => { setPendingConversation(false); navigate(`/ktm/ai/trend/${conv.id}`); }}>
               <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 transition-all",
                 currentConversation === conv.id ? "bg-gradient-to-r from-emerald-500 to-cyan-500 shadow-lg" : "bg-white/5")}>
                 <MessageSquare className="w-3.5 h-3.5" />
