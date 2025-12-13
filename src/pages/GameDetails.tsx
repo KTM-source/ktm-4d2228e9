@@ -14,6 +14,8 @@ import { GameChatbot } from "@/components/games/GameChatbot";
 import { FavoriteButton } from "@/components/games/FavoriteButton";
 import { GameRating } from "@/components/games/GameRating";
 import { GameComments } from "@/components/games/GameComments";
+import { GameAIReview } from "@/components/games/GameAIReview";
+import { GameTranslation } from "@/components/games/GameTranslation";
 import { useAchievements } from "@/hooks/useAchievements";
 import { useUserStats } from "@/hooks/useUserStats";
 import { useAuth } from "@/hooks/useAuth";
@@ -183,9 +185,22 @@ const GameDetails = () => {
                   <GameRating gameId={game.id} size="lg" />
                 </div>
 
+                {/* Translation Dropdown */}
+                <GameTranslation
+                  gameId={game.id}
+                  description={game.description}
+                  review={(game as any).ai_review}
+                  translations={(game as any).translations || {}}
+                />
+
                 <div className="text-muted-foreground leading-relaxed mb-8 text-lg">
                   {parseRichText(game.description)}
                 </div>
+
+                {/* AI Review Section */}
+                {(game as any).ai_review && (
+                  <GameAIReview review={(game as any).ai_review} className="mb-8" />
+                )}
 
                 {/* Trailer Player */}
                 {game.trailer_url && (

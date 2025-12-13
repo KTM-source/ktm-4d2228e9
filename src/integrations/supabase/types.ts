@@ -283,6 +283,8 @@ export type Database = {
       games: {
         Row: {
           additional_files: Json[] | null
+          ai_review: string | null
+          ai_review_status: string | null
           background_image: string | null
           category: string
           created_at: string
@@ -303,12 +305,15 @@ export type Database = {
           system_requirements_recommended: Json | null
           title: string
           trailer_url: string | null
+          translations: Json | null
           updated_at: string
           version: string
           views: number
         }
         Insert: {
           additional_files?: Json[] | null
+          ai_review?: string | null
+          ai_review_status?: string | null
           background_image?: string | null
           category: string
           created_at?: string
@@ -329,12 +334,15 @@ export type Database = {
           system_requirements_recommended?: Json | null
           title: string
           trailer_url?: string | null
+          translations?: Json | null
           updated_at?: string
           version?: string
           views?: number
         }
         Update: {
           additional_files?: Json[] | null
+          ai_review?: string | null
+          ai_review_status?: string | null
           background_image?: string | null
           category?: string
           created_at?: string
@@ -355,6 +363,7 @@ export type Database = {
           system_requirements_recommended?: Json | null
           title?: string
           trailer_url?: string | null
+          translations?: Json | null
           updated_at?: string
           version?: string
           views?: number

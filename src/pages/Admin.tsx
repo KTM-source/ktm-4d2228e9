@@ -19,6 +19,7 @@ import { MultiImageUpload } from "@/components/admin/MultiImageUpload";
 import { FileUpload, AdditionalFile } from "@/components/admin/FileUpload";
 import { RichTextEditor, parseRichText } from "@/components/admin/RichTextEditor";
 import VideoUpload from "@/components/admin/VideoUpload";
+import { AIReviewButton } from "@/components/admin/AIReviewButton";
 import {
   Select,
   SelectContent,
@@ -43,6 +44,7 @@ interface GameForm {
   trailer_url: string;
   screenshots: string[];
   additional_files: AdditionalFile[];
+  ai_review: string;
   system_requirements_minimum: {
     os: string;
     processor: string;
@@ -75,6 +77,7 @@ const initialForm: GameForm = {
   trailer_url: "",
   screenshots: [],
   additional_files: [],
+  ai_review: "",
   system_requirements_minimum: {
     os: "Windows 10",
     processor: "",
@@ -274,6 +277,8 @@ export default function Admin() {
         trailer_url: form.trailer_url || null,
         screenshots: form.screenshots.length > 0 ? form.screenshots : null,
         additional_files: form.additional_files.length > 0 ? form.additional_files : null,
+        ai_review: form.ai_review || null,
+        ai_review_status: form.ai_review ? 'completed' : null,
         system_requirements_minimum: form.system_requirements_minimum,
         system_requirements_recommended: form.system_requirements_recommended,
       };
@@ -322,6 +327,7 @@ export default function Admin() {
       trailer_url: game.trailer_url || "",
       screenshots: game.screenshots || [],
       additional_files: game.additional_files || [],
+      ai_review: game.ai_review || "",
       system_requirements_minimum: game.system_requirements_minimum || initialForm.system_requirements_minimum,
       system_requirements_recommended: game.system_requirements_recommended || initialForm.system_requirements_recommended,
     });
