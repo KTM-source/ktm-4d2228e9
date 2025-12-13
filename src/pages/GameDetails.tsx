@@ -1,5 +1,5 @@
 import { useParams, Link } from "react-router-dom";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Helmet } from "react-helmet-async";
 import { Layout } from "@/components/layout/Layout";
 import { GameCard } from "@/components/games/GameCard";
@@ -42,6 +42,17 @@ const GameDetails = () => {
   const { unlockAchievement } = useAchievements();
   const { incrementStat } = useUserStats();
   const { user } = useAuth();
+  
+  const [displayDescription, setDisplayDescription] = useState<string>("");
+  const [displayReview, setDisplayReview] = useState<string | null>(null);
+  
+  // Reset display content when game changes
+  useEffect(() => {
+    if (game) {
+      setDisplayDescription(game.description);
+      setDisplayReview(game.ai_review || null);
+    }
+  }, [game?.id, game?.description, game?.ai_review]);
 
   useEffect(() => {
     if (game) {
@@ -191,15 +202,19 @@ const GameDetails = () => {
                   description={game.description}
                   review={game.ai_review}
                   translations={game.translations || {}}
+                  onTranslated={(translatedDesc, translatedReview) => {
+                    setDisplayDescription(translatedDesc);
+                    setDisplayReview(translatedReview || null);
+                  }}
                 />
 
                 <div className="text-muted-foreground leading-relaxed mb-8 text-lg">
-                  {parseRichText(game.description)}
+                  {parseRichText(displayDescription)}
                 </div>
 
                 {/* AI Review Section */}
-                {game.ai_review && (
-                  <GameAIReview review={game.ai_review} className="mb-8" />
+                {displayReview && (
+                  <GameAIReview review={displayReview} className="mb-8" />
                 )}
 
                 {/* Trailer Player */}
