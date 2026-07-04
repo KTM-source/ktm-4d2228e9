@@ -1141,7 +1141,21 @@ async function startDownload({ gameId, gameTitle, downloadUrl, gameSlug, gameIma
 }
 
 ipcMain.handle('download-game', async (event, args) => {
-  return startDownload(args);
+  try {
+    if (!args || !args.downloadUrl) {
+      const msg = 'رابط التحميل مفقود';
+      mainWindow?.webContents.send('download-error', { downloadId: '', gameId: args?.gameId || '', error: msg });
+      return { success: false, error: msg };
+    }
+    return await startDownload(args);
+  } catch (err) {
+    const msg = err && err.message ? err.message : 'فشل في بدء التحميل';
+    console.error('download-game error:', err);
+    mainWindow?.webContents.send('download-error', {
+      downloadId: '', gameId: args?.gameId || '', error: msg
+    });
+    return { success: false, error: msg };
+  }
 });
 
 // Pause download
