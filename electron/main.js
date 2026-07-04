@@ -663,6 +663,31 @@ async function startDownload({ gameId, gameTitle, downloadUrl, gameSlug, gameIma
       }
     }
 
+    // Resolve via KTM proxy for hosts like buzzheavier/trashbytes/etc.
+    if (needsProxyResolve(finalUrl)) {
+      try {
+        mainWindow?.webContents.send('download-status', {
+          downloadId, gameId, status: 'resolving',
+          message: 'جاري استخراج رابط التحميل المباشر...'
+        });
+        const resolved = await resolveViaKtmProxy(finalUrl);
+        finalUrl = resolved.directLink;
+        if (resolved.fileName) fileName = resolved.fileName;
+      } catch (err) {
+        const msg = 'فشل استخراج رابط التحميل: ' + err.message;
+        mainWindow?.webContents.send('download-error', { downloadId, gameId, error: msg });
+        reject(new Error(msg));
+        return;
+      }
+    }
+
+    // Try to derive better filename from URL if possible
+    try {
+      const urlPath = new URL(finalUrl).pathname;
+      const urlName = decodeURIComponent(urlPath.split('/').pop() || '');
+      if (urlName && /\.(zip|rar|7z)$/i.test(urlName)) fileName = urlName;
+    } catch {}
+
     const isRar = fileName.toLowerCase().endsWith('.rar') || finalUrl.toLowerCase().includes('.rar');
     const extension = isRar ? '.rar' : '.zip';
     const archivePath = path.join(gameFolder, `${gameSlug}${extension}`);
@@ -674,30 +699,28 @@ async function startDownload({ gameId, gameTitle, downloadUrl, gameSlug, gameIma
       startByte = stats.size;
     }
 
+    let currentRequestUrl = finalUrl;
     const protocol = finalUrl.startsWith('https') ? https : http;
 
     const requestHeaders = {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       'Accept': '*/*',
-      'Accept-Encoding': 'identity', // Disable compression for resume support
+      'Accept-Encoding': 'identity',
       'Connection': 'keep-alive'
     };
 
-    // Add range header for resume
-    if (startByte > 0) {
-      requestHeaders['Range'] = `bytes=${startByte}-`;
-    }
-
-    if (gofileToken) {
-      requestHeaders['Cookie'] = `accountToken=${gofileToken}`;
-    }
+    if (startByte > 0) requestHeaders['Range'] = `bytes=${startByte}-`;
+    if (gofileToken) requestHeaders['Cookie'] = `accountToken=${gofileToken}`;
 
     const request = protocol.get(finalUrl, {
-      timeout: 120000, // Increased timeout for large files
+      timeout: 120000,
       headers: requestHeaders
     }, (response) => {
-      if (response.statusCode === 301 || response.statusCode === 302 || response.statusCode === 303 || response.statusCode === 307) {
-        handleDownload(response.headers.location);
+      if ([301, 302, 303, 307, 308].includes(response.statusCode)) {
+        try {
+          const nextUrl = new URL(response.headers.location, currentRequestUrl).toString();
+          handleDownload(nextUrl);
+        } catch (e) { handleError(new Error('Redirect URL غير صالح')); }
         return;
       }
 
