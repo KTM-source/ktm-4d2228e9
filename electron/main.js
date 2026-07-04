@@ -526,29 +526,33 @@ function processGofileContent(data, token, resolve, reject) {
   resolve({ directLink, fileName, token });
 }
 
-function fetchJson(url, method = 'GET', headers = {}) {
+function fetchJson(url, method = 'GET', headers = {}, body = null) {
   return new Promise((resolve, reject) => {
     const urlObj = new URL(url);
+    const proto = urlObj.protocol === 'http:' ? http : https;
+    const bodyStr = body ? (typeof body === 'string' ? body : JSON.stringify(body)) : null;
     const options = {
       hostname: urlObj.hostname,
+      port: urlObj.port || (urlObj.protocol === 'http:' ? 80 : 443),
       path: urlObj.pathname + urlObj.search,
       method: method,
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        ...(bodyStr ? { 'Content-Length': Buffer.byteLength(bodyStr) } : {}),
         ...headers
       }
     };
 
-    const req = https.request(options, (res) => {
+    const req = proto.request(options, (res) => {
       let data = '';
       res.on('data', chunk => data += chunk);
       res.on('end', () => {
         try {
           resolve(JSON.parse(data));
         } catch (e) {
-          reject(new Error('Invalid JSON response'));
+          reject(new Error('Invalid JSON response: ' + data.slice(0, 200)));
         }
       });
     });
@@ -558,8 +562,48 @@ function fetchJson(url, method = 'GET', headers = {}) {
       req.destroy();
       reject(new Error('Request timeout'));
     });
+    if (bodyStr) req.write(bodyStr);
     req.end();
   });
+}
+
+// KTM download proxy - resolves buzzheavier/trashbytes/etc to direct links
+const KTM_PROXY_URL = 'https://download.ktmgames.qzz.io/api';
+
+function isDirectFileUrl(url) {
+  try {
+    const u = new URL(url);
+    return /\.(zip|rar|7z|exe|iso|bin|tar|gz)(\?|$)/i.test(u.pathname);
+  } catch { return false; }
+}
+
+function needsProxyResolve(url) {
+  if (!url) return false;
+  if (isDirectFileUrl(url)) return false;
+  return /buzzheavier\.com|trashbytes\.net|fuckingfast\.co|pixeldrain\.com|mediafire\.com|1fichier\.com|mega\.nz/i.test(url);
+}
+
+async function resolveViaKtmProxy(originalUrl) {
+  const attempts = [
+    { url: KTM_PROXY_URL, method: 'POST', body: { url: originalUrl } },
+    { url: KTM_PROXY_URL, method: 'GET', body: null, qs: `?url=${encodeURIComponent(originalUrl)}` },
+    { url: 'https://download.ktmgames.qzz.io/', method: 'POST', body: { url: originalUrl } },
+  ];
+  let lastErr = null;
+  for (const a of attempts) {
+    try {
+      const target = a.qs ? a.url + a.qs : a.url;
+      const data = await fetchJson(target, a.method, {}, a.body);
+      const link = data && (data.directLink || data.direct_link || data.url || data.link || data.download);
+      if (link && typeof link === 'string' && /^https?:\/\//i.test(link)) {
+        return { directLink: link, fileName: data.fileName || data.filename || null };
+      }
+      if (data && data.error) lastErr = new Error(data.error);
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr || new Error('فشل استخراج رابط التحميل من الخادم');
 }
 
 // Download game with pause/resume support
