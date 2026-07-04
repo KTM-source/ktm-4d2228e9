@@ -112,7 +112,7 @@ export const useUserStats = () => {
     
     await supabase
       .from('user_stats')
-      .update({ [stat]: newValue })
+      .update({ [stat]: newValue } as any)
       .eq('user_id', userId);
 
     setStats(prev => prev ? { ...prev, [stat]: newValue } : null);
