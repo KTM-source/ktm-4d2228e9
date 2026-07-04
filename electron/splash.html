@@ -1,499 +1,282 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>KTM Launcher</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet" />
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
+    :root {
+      --bg-0: #05060a;
+      --bg-1: #0a0d18;
+      --ink: #eaf2ff;
+      --muted: #7c8aa8;
+      --brand: #7c5cff;
+      --brand-2: #22d3ee;
+      --brand-3: #ff4d8d;
+      --ring: rgba(124, 92, 255, 0.55);
     }
-    
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; }
     body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background: linear-gradient(135deg, #050508 0%, #0d0d15 25%, #1a1a2e 50%, #0d0d15 75%, #050508 100%);
-      color: white;
-      height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
+      font-family: 'Space Grotesk', 'Cairo', system-ui, sans-serif;
+      color: var(--ink);
+      background: var(--bg-0);
       overflow: hidden;
       -webkit-app-region: drag;
+      -webkit-user-select: none;
+      user-select: none;
+      position: relative;
     }
-    
-    .container {
+
+    /* Deep space gradient base */
+    .stage {
+      position: fixed; inset: 0;
+      background:
+        radial-gradient(1200px 800px at 20% -10%, rgba(124,92,255,0.28), transparent 60%),
+        radial-gradient(900px 700px at 110% 20%, rgba(34,211,238,0.22), transparent 60%),
+        radial-gradient(700px 700px at 50% 120%, rgba(255,77,141,0.18), transparent 60%),
+        linear-gradient(180deg, #04050a 0%, #080b16 50%, #04050a 100%);
+    }
+
+    /* Animated mesh grid */
+    .mesh {
+      position: absolute; inset: -1px;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.045) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.045) 1px, transparent 1px);
+      background-size: 44px 44px;
+      mask-image: radial-gradient(ellipse at center, black 40%, transparent 85%);
+      animation: drift 30s linear infinite;
+    }
+    @keyframes drift {
+      from { background-position: 0 0, 0 0; }
+      to   { background-position: 440px 440px, 440px 440px; }
+    }
+
+    /* Floating orbs */
+    .orb {
+      position: absolute; border-radius: 50%;
+      filter: blur(60px); opacity: 0.55; pointer-events: none;
+      mix-blend-mode: screen;
+    }
+    .orb.a { width: 520px; height: 520px; background: #7c5cff; top: -140px; right: -120px; animation: float1 12s ease-in-out infinite; }
+    .orb.b { width: 480px; height: 480px; background: #22d3ee; bottom: -160px; left: -140px; animation: float2 14s ease-in-out infinite; }
+    .orb.c { width: 360px; height: 360px; background: #ff4d8d; top: 40%; left: 55%; animation: float3 16s ease-in-out infinite; }
+    @keyframes float1 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(-40px,30px)} }
+    @keyframes float2 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(30px,-40px)} }
+    @keyframes float3 { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(-20px,-20px) scale(1.08)} }
+
+    /* Particle canvas */
+    #particles { position: absolute; inset: 0; }
+
+    /* Central card */
+    .wrap {
+      position: relative; z-index: 3;
+      height: 100vh;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: 40px 24px;
       text-align: center;
-      z-index: 10;
-      animation: container-entrance 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-      opacity: 0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
     }
-    
-    /* Animated Background */
-    .bg-animation {
-      position: absolute;
-      inset: 0;
-      overflow: hidden;
-    }
-    
-    .bg-animation::before {
-      content: '';
-      position: absolute;
-      width: 1000px;
-      height: 1000px;
-      background: radial-gradient(circle, rgba(0, 212, 255, 0.1) 0%, transparent 60%);
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      animation: pulse-glow 4s ease-in-out infinite;
-    }
-    
-    .bg-animation::after {
-      content: '';
-      position: absolute;
-      width: 700px;
-      height: 700px;
-      background: radial-gradient(circle, rgba(139, 92, 246, 0.08) 0%, transparent 60%);
-      top: 40%;
-      right: 10%;
-      animation: float 8s ease-in-out infinite;
-    }
-    
-    /* Grid Pattern */
-    .grid-pattern {
-      position: absolute;
-      inset: 0;
-      background-image: 
-        linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
-      background-size: 60px 60px;
-      animation: grid-move 25s linear infinite;
-    }
-    
-    /* Logo */
-    .logo-container {
+
+    .card {
       position: relative;
-      margin-bottom: 40px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 160px;
-      height: 160px;
-    }
-    
-    .logo {
-      width: 120px;
-      height: 120px;
+      display: flex; flex-direction: column; align-items: center;
+      padding: 44px 56px;
       border-radius: 28px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      animation: logo-entrance 1.2s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-      box-shadow: 0 30px 100px rgba(0, 212, 255, 0.3),
-                  0 0 150px rgba(139, 92, 246, 0.2),
-                  inset 0 0 80px rgba(255, 255, 255, 0.05);
-      transform: scale(0);
-      overflow: hidden;
-      background: linear-gradient(135deg, rgba(0, 212, 255, 0.15) 0%, rgba(139, 92, 246, 0.15) 100%);
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      margin-top: -60px;
-      margin-left: -60px;
+      background: linear-gradient(180deg, rgba(20,24,40,0.55), rgba(10,12,22,0.35));
+      backdrop-filter: blur(24px) saturate(140%);
+      -webkit-backdrop-filter: blur(24px) saturate(140%);
+      border: 1px solid rgba(255,255,255,0.08);
+      box-shadow:
+        0 30px 90px rgba(0,0,0,0.55),
+        inset 0 1px 0 rgba(255,255,255,0.08);
+      animation: rise 0.9s cubic-bezier(.2,.9,.2,1) both;
     }
-    
-    .logo img {
-      width: 90px;
-      height: 90px;
-      object-fit: contain;
-      filter: drop-shadow(0 0 25px rgba(0, 212, 255, 0.6));
-    }
-    
-    .logo-fallback {
-      font-size: 40px;
-      font-weight: bold;
-      background: linear-gradient(135deg, #00d4ff, #8b5cf6);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-    }
-    
-    .logo-glow {
-      position: absolute;
-      width: 200px;
-      height: 200px;
-      top: 50%;
-      left: 50%;
-      margin-top: -100px;
-      margin-left: -100px;
-      background: linear-gradient(135deg, rgba(0, 212, 255, 0.5) 0%, rgba(139, 92, 246, 0.5) 100%);
-      border-radius: 60px;
-      filter: blur(80px);
-      opacity: 0;
-      animation: glow-pulse 3s ease-in-out infinite 0.5s;
-    }
-    
-    .logo-ring {
-      position: absolute;
-      width: 150px;
-      height: 150px;
-      top: 50%;
-      left: 50%;
-      margin-top: -75px;
-      margin-left: -75px;
-      border: 2px solid transparent;
-      border-radius: 43px;
-      background: linear-gradient(135deg, rgba(0, 212, 255, 0.4), rgba(139, 92, 246, 0.4)) border-box;
-      -webkit-mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
-      mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
-      -webkit-mask-composite: xor;
-      mask-composite: exclude;
-      animation: ring-rotate 4s linear infinite;
-    }
-    
-    .logo-ring-2 {
-      position: absolute;
-      width: 170px;
-      height: 170px;
-      top: 50%;
-      left: 50%;
-      margin-top: -85px;
-      margin-left: -85px;
-      border: 1px solid transparent;
-      border-radius: 53px;
-      background: linear-gradient(135deg, rgba(139, 92, 246, 0.3), rgba(0, 212, 255, 0.3)) border-box;
-      -webkit-mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
-      mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
-      -webkit-mask-composite: xor;
-      mask-composite: exclude;
-      animation: ring-rotate 6s linear infinite reverse;
-    }
-    
-    /* Title */
-    .title {
-      font-size: 38px;
-      font-weight: 800;
-      letter-spacing: 3px;
-      background: linear-gradient(135deg, #ffffff 0%, #00d4ff 40%, #8b5cf6 80%, #ffffff 100%);
-      background-size: 200% auto;
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-      margin-bottom: 10px;
-      opacity: 0;
-      animation: fade-in-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.4s forwards, gradient-text 3s linear infinite 1s;
-    }
-    
-    .subtitle {
-      font-size: 14px;
-      color: rgba(255, 255, 255, 0.55);
-      opacity: 0;
-      animation: fade-in-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.6s forwards;
-      letter-spacing: 2px;
-      text-transform: uppercase;
-    }
-    
-    /* Loading */
-    .loading-container {
-      margin-top: 50px;
-      opacity: 0;
-      animation: fade-in-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.8s forwards;
-      width: 100%;
-    }
-    
-    .loading-bar {
-      width: 350px;
-      height: 4px;
-      background: rgba(255, 255, 255, 0.05);
-      border-radius: 4px;
-      overflow: hidden;
-      margin: 0 auto 25px;
+    @keyframes rise { from { opacity: 0; transform: translateY(24px) scale(.98); } to { opacity: 1; transform: none; } }
+
+    /* Logo */
+    .logo {
       position: relative;
+      width: 132px; height: 132px;
+      display: grid; place-items: center;
+      margin-bottom: 26px;
     }
-    
-    .loading-bar::before {
-      content: '';
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
-      animation: shimmer 2s linear infinite;
-    }
-    
-    .loading-progress {
-      height: 100%;
-      width: 0%;
-      background: linear-gradient(90deg, #00d4ff, #8b5cf6, #00d4ff);
-      background-size: 200% 100%;
-      border-radius: 4px;
-      animation: loading 7s ease-out forwards, gradient-shift 1.5s linear infinite;
-      box-shadow: 0 0 25px rgba(0, 212, 255, 0.6);
-    }
-    
-    .loading-status {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      align-items: center;
-    }
-    
-    .loading-text {
-      font-size: 13px;
-      color: rgba(255, 255, 255, 0.75);
-      min-height: 20px;
-    }
-    
-    .loading-details {
-      font-size: 11px;
-      color: rgba(255, 255, 255, 0.35);
-      font-family: 'Consolas', monospace;
-      min-height: 18px;
-    }
-    
-    .loading-percentage {
-      font-size: 12px;
-      color: rgba(0, 212, 255, 0.8);
-      font-family: 'Consolas', monospace;
-      margin-top: 5px;
-    }
-    
-    /* Particles */
-    .particles {
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-    }
-    
-    .particle {
-      position: absolute;
-      background: rgba(0, 212, 255, 0.6);
+    .logo .ring {
+      position: absolute; inset: -14px;
       border-radius: 50%;
-      animation: particle-float 12s linear infinite;
+      background: conic-gradient(from 0deg, #7c5cff, #22d3ee, #ff4d8d, #7c5cff);
+      filter: blur(2px);
+      animation: spin 6s linear infinite;
+      opacity: 0.9;
     }
-    
-    .particle:nth-child(1) { left: 3%; width: 4px; height: 4px; animation-delay: 0s; }
-    .particle:nth-child(2) { left: 12%; width: 3px; height: 3px; animation-delay: 0.7s; background: rgba(139, 92, 246, 0.6); }
-    .particle:nth-child(3) { left: 22%; width: 5px; height: 5px; animation-delay: 1.4s; }
-    .particle:nth-child(4) { left: 32%; width: 3px; height: 3px; animation-delay: 2.1s; background: rgba(139, 92, 246, 0.6); }
-    .particle:nth-child(5) { left: 42%; width: 4px; height: 4px; animation-delay: 2.8s; }
-    .particle:nth-child(6) { left: 52%; width: 3px; height: 3px; animation-delay: 3.5s; background: rgba(139, 92, 246, 0.6); }
-    .particle:nth-child(7) { left: 62%; width: 5px; height: 5px; animation-delay: 4.2s; }
-    .particle:nth-child(8) { left: 72%; width: 3px; height: 3px; animation-delay: 4.9s; background: rgba(139, 92, 246, 0.6); }
-    .particle:nth-child(9) { left: 82%; width: 4px; height: 4px; animation-delay: 5.6s; }
-    .particle:nth-child(10) { left: 92%; width: 3px; height: 3px; animation-delay: 6.3s; background: rgba(139, 92, 246, 0.6); }
-    .particle:nth-child(11) { left: 7%; width: 3px; height: 3px; animation-delay: 0.3s; }
-    .particle:nth-child(12) { left: 87%; width: 4px; height: 4px; animation-delay: 1.8s; background: rgba(139, 92, 246, 0.6); }
-    .particle:nth-child(13) { left: 17%; width: 3px; height: 3px; animation-delay: 3.2s; }
-    .particle:nth-child(14) { left: 77%; width: 4px; height: 4px; animation-delay: 4.5s; background: rgba(139, 92, 246, 0.6); }
-    
-    /* Version */
-    .version {
-      position: absolute;
-      bottom: 20px;
-      right: 25px;
-      font-size: 11px;
-      color: rgba(255, 255, 255, 0.3);
-      opacity: 0;
-      animation: fade-in 1s ease-out 1.2s forwards;
-      font-family: 'Consolas', monospace;
+    .logo .ring::after {
+      content: ''; position: absolute; inset: 6px;
+      border-radius: 50%; background: #05060a;
     }
-    
-    /* Corner Decorations */
-    .corner {
-      position: absolute;
-      width: 80px;
-      height: 80px;
-      border: 1px solid rgba(255, 255, 255, 0.04);
-      opacity: 0;
-      animation: fade-in 1s ease-out 0.5s forwards;
+    .logo .core {
+      position: relative; z-index: 2;
+      width: 108px; height: 108px; border-radius: 26px;
+      background:
+        radial-gradient(120% 120% at 20% 0%, rgba(124,92,255,0.9), rgba(34,211,238,0.7) 60%, rgba(255,77,141,0.6));
+      display: grid; place-items: center;
+      box-shadow: 0 10px 40px rgba(124,92,255,0.55), inset 0 1px 0 rgba(255,255,255,0.35);
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 700; font-size: 42px; letter-spacing: 1px; color: white;
+      text-shadow: 0 2px 20px rgba(0,0,0,0.35);
     }
-    
-    .corner-tl { top: 25px; left: 25px; border-right: none; border-bottom: none; }
-    .corner-tr { top: 25px; right: 25px; border-left: none; border-bottom: none; }
-    .corner-bl { bottom: 25px; left: 25px; border-right: none; border-top: none; }
-    .corner-br { bottom: 25px; right: 25px; border-left: none; border-top: none; }
-    
-    /* Animations */
-    @keyframes container-entrance {
-      0% { opacity: 0; transform: scale(0.95); }
-      100% { opacity: 1; transform: scale(1); }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .brand {
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 700; font-size: 34px; letter-spacing: 2px;
+      background: linear-gradient(90deg, #ffffff, #b9c6ff 60%, #7cf0ff);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+      margin-bottom: 6px;
     }
-    
-    @keyframes pulse-glow {
-      0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.5; }
-      50% { transform: translate(-50%, -50%) scale(1.3); opacity: 0.8; }
+    .tagline {
+      font-family: 'Cairo', sans-serif;
+      font-size: 13px; color: var(--muted); letter-spacing: 1px;
+      margin-bottom: 30px;
     }
-    
-    @keyframes float {
-      0%, 100% { transform: translateY(0) rotate(0deg); opacity: 0.5; }
-      50% { transform: translateY(-50px) rotate(15deg); opacity: 0.8; }
+
+    /* Progress track */
+    .track {
+      width: 320px; height: 6px;
+      background: rgba(255,255,255,0.06);
+      border-radius: 999px; overflow: hidden;
+      position: relative;
+      border: 1px solid rgba(255,255,255,0.06);
     }
-    
-    @keyframes grid-move {
-      0% { transform: translateY(0); }
-      100% { transform: translateY(60px); }
+    .track .bar {
+      position: absolute; inset: 0;
+      background: linear-gradient(90deg, transparent, #7c5cff, #22d3ee, transparent);
+      background-size: 40% 100%;
+      background-repeat: no-repeat;
+      animation: sweep 1.8s ease-in-out infinite;
+      filter: drop-shadow(0 0 8px rgba(124,92,255,0.7));
     }
-    
-    @keyframes logo-entrance {
-      0% { transform: scale(0) rotate(-180deg); opacity: 0; }
-      60% { transform: scale(1.1) rotate(10deg); opacity: 1; }
-      100% { transform: scale(1) rotate(0deg); opacity: 1; }
+    @keyframes sweep {
+      0% { background-position: -20% 0; }
+      100% { background-position: 120% 0; }
     }
-    
-    @keyframes glow-pulse {
-      0%, 100% { opacity: 0.4; transform: scale(0.9); }
-      50% { opacity: 0.7; transform: scale(1.15); }
+
+    .status {
+      margin-top: 18px;
+      font-family: 'Cairo', sans-serif;
+      font-size: 13px; color: #cfd7ea;
+      min-height: 18px;
+      opacity: 0.9;
     }
-    
-    @keyframes ring-rotate {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
+    .status .dot {
+      display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+      background: #22d3ee; margin-inline-end: 8px; vertical-align: middle;
+      box-shadow: 0 0 10px #22d3ee;
+      animation: pulse 1.2s ease-in-out infinite;
     }
-    
-    @keyframes fade-in-up {
-      0% { opacity: 0; transform: translateY(35px); }
-      100% { opacity: 1; transform: translateY(0); }
+    @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(.7)} }
+
+    .footer {
+      position: absolute; bottom: 22px; left: 0; right: 0;
+      text-align: center;
+      color: rgba(255,255,255,0.35);
+      font-size: 11px; letter-spacing: 2px; font-family: 'Space Grotesk';
     }
-    
-    @keyframes fade-in {
-      0% { opacity: 0; }
-      100% { opacity: 1; }
+    .footer strong { color: rgba(255,255,255,0.6); font-weight: 500; }
+
+    /* Corner chips */
+    .chip {
+      position: absolute; top: 18px;
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 6px 12px;
+      font-family: 'Space Grotesk'; font-size: 11px; letter-spacing: 1.5px;
+      color: #bcc6e0; text-transform: uppercase;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 999px;
+      backdrop-filter: blur(10px);
     }
-    
-    @keyframes loading {
-      0% { width: 0%; }
-      15% { width: 18%; }
-      30% { width: 35%; }
-      45% { width: 52%; }
-      60% { width: 68%; }
-      75% { width: 82%; }
-      90% { width: 94%; }
-      100% { width: 100%; }
-    }
-    
-    @keyframes gradient-shift {
-      0% { background-position: 0% 50%; }
-      100% { background-position: 200% 50%; }
-    }
-    
-    @keyframes gradient-text {
-      0% { background-position: 0% 50%; }
-      100% { background-position: 200% 50%; }
-    }
-    
-    @keyframes shimmer {
-      0% { transform: translateX(-100%); }
-      100% { transform: translateX(100%); }
-    }
-    
-    @keyframes particle-float {
-      0% { transform: translateY(100vh) scale(0); opacity: 0; }
-      10% { opacity: 0.8; transform: scale(1); }
-      90% { opacity: 0.8; }
-      100% { transform: translateY(-100vh) scale(0.5); opacity: 0; }
-    }
+    .chip.left { left: 18px; }
+    .chip.right { right: 18px; }
+    .chip .live { width: 6px; height: 6px; border-radius: 50%; background: #22ff9c; box-shadow: 0 0 8px #22ff9c; animation: pulse 1.2s ease-in-out infinite; }
   </style>
 </head>
 <body>
-  <div class="bg-animation"></div>
-  <div class="grid-pattern"></div>
-  
-  <div class="corner corner-tl"></div>
-  <div class="corner corner-tr"></div>
-  <div class="corner corner-bl"></div>
-  <div class="corner corner-br"></div>
-  
-  <div class="particles">
-    <div class="particle"></div>
-    <div class="particle"></div>
-    <div class="particle"></div>
-    <div class="particle"></div>
-    <div class="particle"></div>
-    <div class="particle"></div>
-    <div class="particle"></div>
-    <div class="particle"></div>
-    <div class="particle"></div>
-    <div class="particle"></div>
-    <div class="particle"></div>
-    <div class="particle"></div>
-    <div class="particle"></div>
-    <div class="particle"></div>
-  </div>
-  
-  <div class="container">
-    <div class="logo-container">
-      <div class="logo-glow"></div>
-      <div class="logo-ring"></div>
-      <div class="logo-ring-2"></div>
-      <div class="logo">
-        <img src="assets/icon.png" alt="KTM" id="logoImg" />
-      </div>
-    </div>
-    
-    <h1 class="title">KTM LAUNCHER</h1>
-    <p class="subtitle">منصة الألعاب المتكاملة</p>
-    
-    <div class="loading-container">
-      <div class="loading-bar">
-        <div class="loading-progress"></div>
-      </div>
-      <div class="loading-status">
-        <p class="loading-text" id="loadingText">جاري التهيئة...</p>
-        <p class="loading-details" id="loadingDetails">initializing core systems...</p>
-        <p class="loading-percentage" id="loadingPercent">0%</p>
-      </div>
-    </div>
-  </div>
-  
-  <div class="version">v1.0.0</div>
-  
-  <script>
-    // Handle image load error
-    const logoImg = document.getElementById('logoImg');
-    logoImg.onerror = function() {
-      this.style.display = 'none';
-      const fallback = document.createElement('span');
-      fallback.className = 'logo-fallback';
-      fallback.textContent = 'KTM';
-      this.parentElement.appendChild(fallback);
-    };
+  <div class="stage"></div>
+  <div class="mesh"></div>
+  <div class="orb a"></div>
+  <div class="orb b"></div>
+  <div class="orb c"></div>
+  <canvas id="particles"></canvas>
 
-    const loadingSteps = [
-      { ar: "جاري التهيئة...", en: "initializing core systems...", percent: 0 },
-      { ar: "تحميل المكونات الأساسية...", en: "loading essential components...", percent: 15 },
-      { ar: "التحقق من ملفات النظام...", en: "verifying system files...", percent: 30 },
-      { ar: "تحميل مكتبة الألعاب...", en: "loading game library...", percent: 45 },
-      { ar: "تهيئة واجهة المستخدم...", en: "preparing user interface...", percent: 58 },
-      { ar: "الاتصال بالخوادم...", en: "connecting to servers...", percent: 70 },
-      { ar: "تحميل الإعدادات...", en: "loading user settings...", percent: 82 },
-      { ar: "التحقق من التحديثات...", en: "checking for updates...", percent: 92 },
-      { ar: "جاري الإطلاق...", en: "launching application...", percent: 100 }
+  <div class="chip left"><span class="live"></span> SYSTEM ONLINE</div>
+  <div class="chip right">v1.3.0 · 2026</div>
+
+  <div class="wrap">
+    <div class="card">
+      <div class="logo">
+        <div class="ring"></div>
+        <div class="core">K</div>
+      </div>
+      <div class="brand">KTM LAUNCHER</div>
+      <div class="tagline">تجربة ألعاب من الجيل القادم</div>
+
+      <div class="track"><div class="bar"></div></div>
+      <div class="status" id="status"><span class="dot"></span><span id="status-text">جاري تهيئة النظام…</span></div>
+    </div>
+  </div>
+
+  <div class="footer">© 2026 KTM GAMES · <strong>NEXT-GEN GAMING PLATFORM</strong></div>
+
+  <script>
+    // Rotating status
+    const messages = [
+      'جاري تهيئة النظام…',
+      'الاتصال بخوادم الألعاب…',
+      'تحميل المكتبة…',
+      'تحضير الواجهة…',
+      'اللمسات الأخيرة…'
     ];
-    
-    const textEl = document.getElementById('loadingText');
-    const detailsEl = document.getElementById('loadingDetails');
-    const percentEl = document.getElementById('loadingPercent');
-    let stepIndex = 0;
-    
-    function updateLoadingStep() {
-      if (stepIndex < loadingSteps.length) {
-        const step = loadingSteps[stepIndex];
-        textEl.textContent = step.ar;
-        detailsEl.textContent = step.en;
-        percentEl.textContent = step.percent + '%';
-        stepIndex++;
-        
-        const delay = stepIndex < loadingSteps.length ? 750 + Math.random() * 200 : 500;
-        setTimeout(updateLoadingStep, delay);
-      }
+    let idx = 0;
+    const el = document.getElementById('status-text');
+    setInterval(() => { idx = (idx + 1) % messages.length; el.textContent = messages[idx]; }, 1400);
+
+    // Particles
+    const canvas = document.getElementById('particles');
+    const ctx = canvas.getContext('2d');
+    let W, H, particles;
+    const colors = ['#7c5cff', '#22d3ee', '#ff4d8d', '#ffffff'];
+    function resize() { W = canvas.width = innerWidth; H = canvas.height = innerHeight; }
+    function init() {
+      particles = Array.from({ length: 70 }, () => ({
+        x: Math.random() * W, y: Math.random() * H,
+        vx: (Math.random() - 0.5) * 0.4, vy: (Math.random() - 0.5) * 0.4,
+        r: Math.random() * 1.8 + 0.4,
+        c: colors[Math.floor(Math.random() * colors.length)],
+        a: Math.random() * 0.6 + 0.2
+      }));
     }
-    
-    setTimeout(updateLoadingStep, 300);
+    function tick() {
+      ctx.clearRect(0, 0, W, H);
+      for (const p of particles) {
+        p.x += p.vx; p.y += p.vy;
+        if (p.x < 0 || p.x > W) p.vx *= -1;
+        if (p.y < 0 || p.y > H) p.vy *= -1;
+        ctx.beginPath();
+        ctx.fillStyle = p.c;
+        ctx.globalAlpha = p.a;
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      requestAnimationFrame(tick);
+    }
+    addEventListener('resize', () => { resize(); init(); });
+    resize(); init(); tick();
   </script>
 </body>
 </html>

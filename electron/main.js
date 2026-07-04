@@ -10,18 +10,38 @@ const { exec, spawn } = require('child_process');
 const store = new Store();
 
 // App version - must match public/version.txt after updates
-const APP_VERSION = 'v1.1.0';
+const APP_VERSION = 'v1.2.0';
 
 let mainWindow;
 let splashWindow;
 let downloadPath = store.get('downloadPath') || path.join(app.getPath('downloads'), 'KTM Games');
 let activeDownloads = new Map();
+
+// Controllers for active downloads (so we can really cancel/pause/cleanup streams)
+// downloadId -> { request, fileStream, speedInterval }
+let downloadControllers = new Map();
 let currentDownloadRequest = null;
 let installedGames = store.get('installedGames') || [];
 let downloadHistory = store.get('downloadHistory') || [];
 
 // Paused downloads - persisted for resume functionality
 let pausedDownloads = store.get('pausedDownloads') || [];
+
+function cleanupDownloadController(downloadId) {
+  const ctrl = downloadControllers.get(downloadId);
+  if (!ctrl) return;
+
+  try { if (ctrl.speedInterval) clearInterval(ctrl.speedInterval); } catch (e) {}
+  try { if (ctrl.request) ctrl.request.destroy(); } catch (e) {}
+  try {
+    if (ctrl.fileStream) {
+      try { ctrl.fileStream.close(); } catch (e) {}
+    }
+  } catch (e) {}
+
+  downloadControllers.delete(downloadId);
+}
+
 
 // Running games tracking
 let runningGames = new Map();
@@ -37,8 +57,6 @@ let settings = store.get('settings') || {
   theme: 'dark',
   language: 'ar',
   downloadSpeed: 0,
-  autoExtract: true,
-  deleteArchiveAfterExtract: true,
   verifyIntegrity: true,
   soundEffects: true
 };
@@ -46,6 +64,67 @@ let settings = store.get('settings') || {
 // Ensure download directory exists
 if (!fs.existsSync(downloadPath)) {
   fs.mkdirSync(downloadPath, { recursive: true });
+}
+
+// Files/folders to delete automatically from game folders
+const UNWANTED_FILES = [
+  'STEAMRIP » Free Pre-installed Steam Games.url',
+  'STEAMRIP » Free Pre-installed Steam Games',
+  'Read_Me_Instructions.txt'
+];
+const UNWANTED_FOLDERS = ['_CommonRedist'];
+
+// Clean unwanted files from a game folder
+function cleanUnwantedFiles(gameFolder) {
+  try {
+    // Delete unwanted files
+    for (const fileName of UNWANTED_FILES) {
+      const filePath = path.join(gameFolder, fileName);
+      if (fs.existsSync(filePath)) {
+        try {
+          fs.unlinkSync(filePath);
+          console.log(`Deleted unwanted file: ${filePath}`);
+        } catch (e) {
+          console.error(`Failed to delete ${filePath}:`, e.message);
+        }
+      }
+    }
+    
+    // Delete unwanted folders
+    for (const folderName of UNWANTED_FOLDERS) {
+      const folderPath = path.join(gameFolder, folderName);
+      if (fs.existsSync(folderPath)) {
+        try {
+          fs.rmSync(folderPath, { recursive: true, force: true });
+          console.log(`Deleted unwanted folder: ${folderPath}`);
+        } catch (e) {
+          console.error(`Failed to delete ${folderPath}:`, e.message);
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Error cleaning unwanted files:', e.message);
+  }
+}
+
+// Periodic cleanup of all game folders
+function startPeriodicCleanup() {
+  setInterval(() => {
+    if (!fs.existsSync(downloadPath)) return;
+    
+    try {
+      const folders = fs.readdirSync(downloadPath, { withFileTypes: true })
+        .filter(dirent => dirent.isDirectory())
+        .map(dirent => dirent.name);
+      
+      for (const folderName of folders) {
+        const gameFolder = path.join(downloadPath, folderName);
+        cleanUnwantedFiles(gameFolder);
+      }
+    } catch (e) {
+      // Silent fail for periodic cleanup
+    }
+  }, 1000); // Check every 1 second
 }
 
 function createSplashWindow() {
@@ -82,13 +161,42 @@ function createMainWindow() {
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
       webSecurity: true,
+      // CRITICAL: Disable background throttling to prevent UI from disappearing during long downloads
       backgroundThrottling: false,
       spellcheck: false,
       v8CacheOptions: 'code',
-      devTools: false
+      devTools: false,
+      // Memory optimizations for long downloads
+      enableWebSQL: false,
+      partition: 'persist:ktm'
     },
     icon: path.join(__dirname, 'assets', 'icon.png'),
     backgroundColor: settings.theme === 'light' ? '#ffffff' : '#0a0a0f'
+  });
+
+  // Prevent renderer from being throttled when in background or after long idle
+  mainWindow.webContents.setBackgroundThrottling(false);
+  
+  // Force keep-alive for renderer process during downloads
+  mainWindow.webContents.on('render-process-gone', (event, details) => {
+    console.log('Renderer process gone:', details.reason);
+    // Attempt to reload if not a normal exit
+    if (details.reason !== 'killed' && details.reason !== 'clean-exit') {
+      setTimeout(() => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.reload();
+        }
+      }, 1000);
+    }
+  });
+
+  // Prevent page from going unresponsive
+  mainWindow.webContents.on('unresponsive', () => {
+    console.log('Page became unresponsive - attempting recovery');
+  });
+
+  mainWindow.webContents.on('responsive', () => {
+    console.log('Page is responsive again');
   });
 
   mainWindow.webContents.setBackgroundThrottling(false);
@@ -167,8 +275,12 @@ app.commandLine.appendSwitch('disable-frame-rate-limit');
 app.commandLine.appendSwitch('enable-gpu-rasterization');
 app.commandLine.appendSwitch('enable-zero-copy');
 app.commandLine.appendSwitch('ignore-gpu-blocklist');
-// Memory optimizations for large downloads
-app.commandLine.appendSwitch('js-flags', '--max-old-space-size=4096');
+
+// CRITICAL: Memory and stability optimizations for long downloads
+app.commandLine.appendSwitch('js-flags', '--max-old-space-size=4096 --expose-gc');
+app.commandLine.appendSwitch('disable-renderer-backgrounding');
+app.commandLine.appendSwitch('disable-background-timer-throttling');
+app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
 
 const savedSettings = store.get('settings') || {};
 if (savedSettings.hardwareAcceleration === false) {
@@ -178,6 +290,9 @@ if (savedSettings.hardwareAcceleration === false) {
 app.whenReady().then(() => {
   createSplashWindow();
   createMainWindow();
+  
+  // Start periodic cleanup of unwanted files
+  startPeriodicCleanup();
 });
 
 // Save paused downloads before quitting
@@ -199,14 +314,19 @@ app.on('before-quit', () => {
         pausedAt: new Date().toISOString()
       });
     }
+
+    // Always cleanup streams so files are not locked by the app
+    cleanupDownloadController(downloadId);
   }
+
   store.set('pausedDownloads', pausedDownloads);
-  
-  // Cancel current download request
+
+  // Backward-compat: also cancel current request
   if (currentDownloadRequest) {
     try { currentDownloadRequest.destroy(); } catch (e) {}
   }
 });
+
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
@@ -406,29 +526,33 @@ function processGofileContent(data, token, resolve, reject) {
   resolve({ directLink, fileName, token });
 }
 
-function fetchJson(url, method = 'GET', headers = {}) {
+function fetchJson(url, method = 'GET', headers = {}, body = null) {
   return new Promise((resolve, reject) => {
     const urlObj = new URL(url);
+    const proto = urlObj.protocol === 'http:' ? http : https;
+    const bodyStr = body ? (typeof body === 'string' ? body : JSON.stringify(body)) : null;
     const options = {
       hostname: urlObj.hostname,
+      port: urlObj.port || (urlObj.protocol === 'http:' ? 80 : 443),
       path: urlObj.pathname + urlObj.search,
       method: method,
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        ...(bodyStr ? { 'Content-Length': Buffer.byteLength(bodyStr) } : {}),
         ...headers
       }
     };
 
-    const req = https.request(options, (res) => {
+    const req = proto.request(options, (res) => {
       let data = '';
       res.on('data', chunk => data += chunk);
       res.on('end', () => {
         try {
           resolve(JSON.parse(data));
         } catch (e) {
-          reject(new Error('Invalid JSON response'));
+          reject(new Error('Invalid JSON response: ' + data.slice(0, 200)));
         }
       });
     });
@@ -438,8 +562,48 @@ function fetchJson(url, method = 'GET', headers = {}) {
       req.destroy();
       reject(new Error('Request timeout'));
     });
+    if (bodyStr) req.write(bodyStr);
     req.end();
   });
+}
+
+// KTM download proxy - resolves buzzheavier/trashbytes/etc to direct links
+const KTM_PROXY_URL = 'https://download.ktmgames.qzz.io/api';
+
+function isDirectFileUrl(url) {
+  try {
+    const u = new URL(url);
+    return /\.(zip|rar|7z|exe|iso|bin|tar|gz)(\?|$)/i.test(u.pathname);
+  } catch { return false; }
+}
+
+function needsProxyResolve(url) {
+  if (!url) return false;
+  if (isDirectFileUrl(url)) return false;
+  return /buzzheavier\.com|trashbytes\.net|fuckingfast\.co|pixeldrain\.com|mediafire\.com|1fichier\.com|mega\.nz/i.test(url);
+}
+
+async function resolveViaKtmProxy(originalUrl) {
+  const attempts = [
+    { url: KTM_PROXY_URL, method: 'POST', body: { url: originalUrl } },
+    { url: KTM_PROXY_URL, method: 'GET', body: null, qs: `?url=${encodeURIComponent(originalUrl)}` },
+    { url: 'https://download.ktmgames.qzz.io/', method: 'POST', body: { url: originalUrl } },
+  ];
+  let lastErr = null;
+  for (const a of attempts) {
+    try {
+      const target = a.qs ? a.url + a.qs : a.url;
+      const data = await fetchJson(target, a.method, {}, a.body);
+      const link = data && (data.directLink || data.direct_link || data.url || data.link || data.download);
+      if (link && typeof link === 'string' && /^https?:\/\//i.test(link)) {
+        return { directLink: link, fileName: data.fileName || data.filename || null };
+      }
+      if (data && data.error) lastErr = new Error(data.error);
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr || new Error('فشل استخراج رابط التحميل من الخادم');
 }
 
 // Download game with pause/resume support
@@ -499,6 +663,31 @@ async function startDownload({ gameId, gameTitle, downloadUrl, gameSlug, gameIma
       }
     }
 
+    // Resolve via KTM proxy for hosts like buzzheavier/trashbytes/etc.
+    if (needsProxyResolve(finalUrl)) {
+      try {
+        mainWindow?.webContents.send('download-status', {
+          downloadId, gameId, status: 'resolving',
+          message: 'جاري استخراج رابط التحميل المباشر...'
+        });
+        const resolved = await resolveViaKtmProxy(finalUrl);
+        finalUrl = resolved.directLink;
+        if (resolved.fileName) fileName = resolved.fileName;
+      } catch (err) {
+        const msg = 'فشل استخراج رابط التحميل: ' + err.message;
+        mainWindow?.webContents.send('download-error', { downloadId, gameId, error: msg });
+        reject(new Error(msg));
+        return;
+      }
+    }
+
+    // Try to derive better filename from URL if possible
+    try {
+      const urlPath = new URL(finalUrl).pathname;
+      const urlName = decodeURIComponent(urlPath.split('/').pop() || '');
+      if (urlName && /\.(zip|rar|7z)$/i.test(urlName)) fileName = urlName;
+    } catch {}
+
     const isRar = fileName.toLowerCase().endsWith('.rar') || finalUrl.toLowerCase().includes('.rar');
     const extension = isRar ? '.rar' : '.zip';
     const archivePath = path.join(gameFolder, `${gameSlug}${extension}`);
@@ -510,30 +699,28 @@ async function startDownload({ gameId, gameTitle, downloadUrl, gameSlug, gameIma
       startByte = stats.size;
     }
 
+    let currentRequestUrl = finalUrl;
     const protocol = finalUrl.startsWith('https') ? https : http;
 
     const requestHeaders = {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       'Accept': '*/*',
-      'Accept-Encoding': 'identity', // Disable compression for resume support
+      'Accept-Encoding': 'identity',
       'Connection': 'keep-alive'
     };
 
-    // Add range header for resume
-    if (startByte > 0) {
-      requestHeaders['Range'] = `bytes=${startByte}-`;
-    }
-
-    if (gofileToken) {
-      requestHeaders['Cookie'] = `accountToken=${gofileToken}`;
-    }
+    if (startByte > 0) requestHeaders['Range'] = `bytes=${startByte}-`;
+    if (gofileToken) requestHeaders['Cookie'] = `accountToken=${gofileToken}`;
 
     const request = protocol.get(finalUrl, {
-      timeout: 120000, // Increased timeout for large files
+      timeout: 120000,
       headers: requestHeaders
     }, (response) => {
-      if (response.statusCode === 301 || response.statusCode === 302 || response.statusCode === 303 || response.statusCode === 307) {
-        handleDownload(response.headers.location);
+      if ([301, 302, 303, 307, 308].includes(response.statusCode)) {
+        try {
+          const nextUrl = new URL(response.headers.location, currentRequestUrl).toString();
+          handleDownload(nextUrl);
+        } catch (e) { handleError(new Error('Redirect URL غير صالح')); }
         return;
       }
 
@@ -579,13 +766,21 @@ async function startDownload({ gameId, gameTitle, downloadUrl, gameSlug, gameIma
     }
 
     function handleDownload(url) {
+      currentRequestUrl = url;
       const proto = url.startsWith('https') ? https : http;
       const redirectRequest = proto.get(url, {
         timeout: 120000,
         headers: requestHeaders
       }, (res) => {
-        if (res.statusCode === 301 || res.statusCode === 302 || res.statusCode === 303 || res.statusCode === 307) {
-          handleDownload(res.headers.location);
+        if ([301, 302, 303, 307, 308].includes(res.statusCode)) {
+          try {
+            const nextUrl = new URL(res.headers.location, currentRequestUrl).toString();
+            handleDownload(nextUrl);
+          } catch (e) { handleError(new Error('Redirect URL غير صالح')); }
+          return;
+        }
+        if (res.statusCode !== 200 && res.statusCode !== 206) {
+          handleError(new Error(`HTTP ${res.statusCode}`));
           return;
         }
         handleResponse(res, res.statusCode === 206);
@@ -616,11 +811,13 @@ async function startDownload({ gameId, gameTitle, downloadUrl, gameSlug, gameIma
       let lastProgressTime = Date.now();
       let lastDownloadedSize = startByte;
       let currentSpeed = 0;
+      let lastUIUpdateTime = 0;
 
       // Use append mode for resume, write mode for fresh
+      // Optimized buffer sizes for better performance
       const fileStream = fs.createWriteStream(archivePath, {
         flags: isResume ? 'a' : 'w',
-        highWaterMark: 64 * 1024 * 1024 // 64MB buffer for large files
+        highWaterMark: 16 * 1024 * 1024 // 16MB buffer - balanced for memory and speed
       });
 
       const downloadData = {
@@ -656,17 +853,53 @@ async function startDownload({ gameId, gameTitle, downloadUrl, gameSlug, gameIma
         status: 'downloading'
       });
 
-      // Speed calculation with smoothing
+      // Speed calculation - reduced frequency for better performance
+      let lastSaveTime = Date.now();
       const speedInterval = setInterval(() => {
         const now = Date.now();
+
+        const data = activeDownloads.get(downloadId);
+        // If user paused/canceled or download is gone, stop saving state
+        if (!data || data.status !== 'downloading') {
+          return;
+        }
+
         const timeDiff = (now - lastProgressTime) / 1000;
         if (timeDiff > 0) {
           const byteDiff = downloadedSize - lastDownloadedSize;
-          currentSpeed = byteDiff / timeDiff;
+          // Smooth speed calculation with weighted average
+          const instantSpeed = byteDiff / timeDiff;
+          currentSpeed = currentSpeed > 0 ? (currentSpeed * 0.7 + instantSpeed * 0.3) : instantSpeed;
           lastProgressTime = now;
           lastDownloadedSize = downloadedSize;
         }
-      }, 1000);
+
+        // Save state every 5 seconds for recovery (reduced from 1s for better performance)
+        const safeProgress = totalSize > 0 ? (downloadedSize / totalSize) * 100 : 0;
+        if (safeProgress < 99.9 && now - lastSaveTime > 5000) {
+          lastSaveTime = now;
+          const pausedData = {
+            downloadId,
+            gameId,
+            gameTitle,
+            gameSlug,
+            gameImage,
+            downloadUrl,
+            totalSize,
+            downloadedSize,
+            archivePath,
+            isRar,
+            pausedAt: new Date().toISOString()
+          };
+          pausedDownloads = pausedDownloads.filter(d => d.downloadId !== downloadId);
+          pausedDownloads.push(pausedData);
+          store.set('pausedDownloads', pausedDownloads);
+        }
+      }, 2000); // Reduced from 1000ms to 2000ms
+
+      // Register controller for proper cancel/pause cleanup
+      downloadControllers.set(downloadId, { request: currentDownloadRequest, fileStream, speedInterval });
+
 
       response.on('data', (chunk) => {
         downloadedSize += chunk.length;
@@ -678,8 +911,11 @@ async function startDownload({ gameId, gameTitle, downloadUrl, gameSlug, gameIma
           data.progress = progress;
         }
 
-        // Throttle progress updates to reduce UI strain
-        if (Date.now() - lastProgressTime > 500) {
+        // Throttle UI updates to every 1 second for better performance
+        // This prevents overwhelming the renderer with updates during fast downloads
+        const now = Date.now();
+        if (now - lastUIUpdateTime > 1000 || progress >= 99) {
+          lastUIUpdateTime = now;
           mainWindow?.webContents.send('download-progress', {
             downloadId,
             gameId,
@@ -689,7 +925,7 @@ async function startDownload({ gameId, gameTitle, downloadUrl, gameSlug, gameIma
             downloadedSize,
             totalSize,
             speed: currentSpeed,
-            status: 'downloading'
+            status: progress >= 99.9 ? 'finalizing' : 'downloading'
           });
         }
       });
@@ -698,37 +934,29 @@ async function startDownload({ gameId, gameTitle, downloadUrl, gameSlug, gameIma
 
       fileStream.on('finish', async () => {
         clearInterval(speedInterval);
-        fileStream.close();
+        
+        // Close stream before any file operations
+        try { fileStream.close(); } catch(e) {}
+        
         currentDownloadRequest = null;
+        cleanupDownloadController(downloadId);
 
-        if (settings.autoExtract) {
-          mainWindow?.webContents.send('download-status', {
-            downloadId,
-            gameId,
-            status: 'extracting',
-            message: 'جاري فك الضغط...'
-          });
+        // Remove any lingering paused record for this download (prevents 100% showing as paused later)
+        pausedDownloads = pausedDownloads.filter(d => d.downloadId !== downloadId);
+        store.set('pausedDownloads', pausedDownloads);
 
-          try {
-            await extractArchive(archivePath, gameFolder, isRar);
-
-            if (settings.deleteArchiveAfterExtract && fs.existsSync(archivePath)) {
-              fs.unlinkSync(archivePath);
-            }
-
-            completeDownload();
-          } catch (extractError) {
-            mainWindow?.webContents.send('download-error', {
-              downloadId,
-              gameId,
-              error: 'فشل في فك الضغط: ' + extractError.message
-            });
-            activeDownloads.delete(downloadId);
-            reject(extractError);
-          }
-        } else {
-          completeDownload();
+        // Check if download truly completed (downloadedSize matches totalSize or is close enough)
+        const data = activeDownloads.get(downloadId);
+        const downloadCompleteEnough = totalSize === 0 || downloadedSize >= totalSize * 0.99;
+        
+        if (!downloadCompleteEnough) {
+          // Download didn't fully complete - treat as error for resume
+          handleError(new Error('انقطع التنزيل قبل اكتماله'), true);
+          return;
         }
+
+        // Download complete - no extraction, just complete immediately
+        completeDownload();
       });
 
       function completeDownload() {
@@ -785,6 +1013,7 @@ async function startDownload({ gameId, gameTitle, downloadUrl, gameSlug, gameIma
       fileStream.on('error', (err) => {
         clearInterval(speedInterval);
         currentDownloadRequest = null;
+        cleanupDownloadController(downloadId);
         activeDownloads.delete(downloadId);
         mainWindow?.webContents.send('download-error', {
           downloadId,
@@ -795,40 +1024,155 @@ async function startDownload({ gameId, gameTitle, downloadUrl, gameSlug, gameIma
       });
     }
 
-    function handleError(err) {
+    let retryCount = 0;
+    const maxRetries = 5;
+    const retryDelay = 5000; // 5 seconds
+
+    function handleError(err, canRetry = true) {
       currentDownloadRequest = null;
-      activeDownloads.delete(downloadId);
-      mainWindow?.webContents.send('download-error', {
-        downloadId,
-        gameId,
-        error: err.message
-      });
+      
+      const downloadData = activeDownloads.get(downloadId);
+      
+      // Auto-retry for recoverable errors
+      if (canRetry && retryCount < maxRetries && downloadData && downloadData.downloadedSize > 0) {
+        retryCount++;
+        console.log(`Download error, retrying (${retryCount}/${maxRetries}): ${err.message}`);
+        
+        // Save current state before retry
+        const pausedData = {
+          downloadId,
+          gameId: downloadData.gameId,
+          gameTitle: downloadData.gameTitle,
+          gameSlug: downloadData.gameSlug,
+          gameImage: downloadData.gameImage,
+          downloadUrl: downloadData.downloadUrl,
+          totalSize: downloadData.totalSize,
+          downloadedSize: downloadData.downloadedSize,
+          archivePath: downloadData.archivePath,
+          isRar: downloadData.isRar,
+          pausedAt: new Date().toISOString()
+        };
+        
+        mainWindow?.webContents.send('download-status', {
+          downloadId,
+          gameId,
+          status: 'retrying',
+          message: `جاري إعادة المحاولة (${retryCount}/${maxRetries})...`
+        });
+        
+        // Wait then retry
+        setTimeout(async () => {
+          try {
+            await startDownload({
+              gameId: pausedData.gameId,
+              gameTitle: pausedData.gameTitle,
+              downloadUrl: pausedData.downloadUrl,
+              gameSlug: pausedData.gameSlug,
+              gameImage: pausedData.gameImage,
+              resumeFrom: pausedData
+            });
+            resolve({ success: true });
+          } catch (retryErr) {
+            handleError(retryErr, retryCount < maxRetries);
+          }
+        }, retryDelay);
+        return;
+      }
+      
+      // No more retries - save to paused and notify
+      if (downloadData && downloadData.downloadedSize > 0) {
+        // Save progress for manual resume later
+        const pausedData = {
+          downloadId,
+          gameId: downloadData.gameId,
+          gameTitle: downloadData.gameTitle,
+          gameSlug: downloadData.gameSlug,
+          gameImage: downloadData.gameImage,
+          downloadUrl: downloadData.downloadUrl,
+          totalSize: downloadData.totalSize,
+          downloadedSize: downloadData.downloadedSize,
+          archivePath: downloadData.archivePath,
+          isRar: downloadData.isRar,
+          pausedAt: new Date().toISOString(),
+          error: err.message
+        };
+        
+        pausedDownloads = pausedDownloads.filter(d => d.downloadId !== downloadId);
+        pausedDownloads.push(pausedData);
+        store.set('pausedDownloads', pausedDownloads);
+        
+        // Keep in active downloads but mark as error
+        downloadData.status = 'error';
+        downloadData.errorMessage = err.message;
+        
+        mainWindow?.webContents.send('download-status', {
+          downloadId,
+          gameId,
+          status: 'error',
+          message: `خطأ: ${err.message} - يمكنك استئناف التحميل لاحقاً`
+        });
+        
+        // Show notification
+        if (settings.notifications && Notification.isSupported()) {
+          new Notification({
+            title: 'توقف التحميل',
+            body: `${gameTitle}: ${err.message}. تم حفظ التقدم.`,
+            icon: path.join(__dirname, 'assets', 'icon.png')
+          }).show();
+        }
+      } else {
+        activeDownloads.delete(downloadId);
+        mainWindow?.webContents.send('download-error', {
+          downloadId,
+          gameId,
+          error: err.message
+        });
+      }
+      
       reject(err);
     }
 
-    request.on('error', handleError);
+    request.on('error', (err) => handleError(err, true));
     request.on('timeout', () => {
       request.destroy();
-      handleError(new Error('Connection timeout'));
+      handleError(new Error('انقطع الاتصال - جاري إعادة المحاولة'), true);
     });
   });
 }
 
 ipcMain.handle('download-game', async (event, args) => {
-  return startDownload(args);
+  try {
+    if (!args || !args.downloadUrl) {
+      const msg = 'رابط التحميل مفقود';
+      mainWindow?.webContents.send('download-error', { downloadId: '', gameId: args?.gameId || '', error: msg });
+      return { success: false, error: msg };
+    }
+    return await startDownload(args);
+  } catch (err) {
+    const msg = err && err.message ? err.message : 'فشل في بدء التحميل';
+    console.error('download-game error:', err);
+    mainWindow?.webContents.send('download-error', {
+      downloadId: '', gameId: args?.gameId || '', error: msg
+    });
+    return { success: false, error: msg };
+  }
 });
 
 // Pause download
 ipcMain.handle('pause-download', async (event, downloadId) => {
+  // Stop streams to avoid file locks
+  cleanupDownloadController(downloadId);
+
+  // Backward-compat: stop current request if any
   if (currentDownloadRequest) {
     try { currentDownloadRequest.destroy(); } catch (e) {}
     currentDownloadRequest = null;
   }
-  
+
   if (activeDownloads.has(downloadId)) {
     const downloadData = activeDownloads.get(downloadId);
     downloadData.status = 'paused';
-    
+
     // Save to paused downloads
     const pausedData = {
       downloadId,
@@ -843,18 +1187,18 @@ ipcMain.handle('pause-download', async (event, downloadId) => {
       isRar: downloadData.isRar,
       pausedAt: new Date().toISOString()
     };
-    
+
     // Remove if already exists and add fresh
     pausedDownloads = pausedDownloads.filter(d => d.downloadId !== downloadId);
     pausedDownloads.push(pausedData);
     store.set('pausedDownloads', pausedDownloads);
-    
+
     mainWindow?.webContents.send('download-status', {
       downloadId,
       gameId: downloadData.gameId,
       status: 'paused'
     });
-    
+
     return { success: true };
   }
   return { success: false };
@@ -890,16 +1234,20 @@ ipcMain.handle('get-paused-downloads', () => {
 
 // Cancel download and delete partial files
 ipcMain.handle('cancel-download', (event, downloadId) => {
+  // Hard stop: close streams first to avoid Windows "SYSTEM" lock issues
+  cleanupDownloadController(downloadId);
+
+  // Backward-compat: stop current request if any
   if (currentDownloadRequest) {
     try { currentDownloadRequest.destroy(); } catch (e) {}
     currentDownloadRequest = null;
   }
-  
+
   let downloadData = activeDownloads.get(downloadId);
   if (!downloadData) {
     downloadData = pausedDownloads.find(d => d.downloadId === downloadId);
   }
-  
+
   if (downloadData) {
     // Delete partial download files
     if (downloadData.archivePath) {
@@ -918,11 +1266,11 @@ ipcMain.handle('cancel-download', (event, downloadId) => {
         console.error('Error deleting partial download:', err);
       }
     }
-    
+
     activeDownloads.delete(downloadId);
     pausedDownloads = pausedDownloads.filter(d => d.downloadId !== downloadId);
     store.set('pausedDownloads', pausedDownloads);
-    
+
     return { success: true, deleted: true };
   }
   return { success: false };
