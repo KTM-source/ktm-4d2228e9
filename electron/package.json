@@ -136,10 +136,12 @@
       "synopsis": "KTM Games Launcher",
       "description": "منصة KTM للألعاب - حمل وشغل ألعابك المفضلة",
       "desktop": {
-        "Name": "KTM Launcher",
-        "Comment": "KTM Games Launcher",
-        "Categories": "Game;",
-        "StartupWMClass": "ktm-launcher"
+        "entry": {
+          "Name": "KTM Launcher",
+          "Comment": "KTM Games Launcher",
+          "Categories": "Game;",
+          "StartupWMClass": "ktm-launcher"
+        }
       }
     },
     "snap": {
