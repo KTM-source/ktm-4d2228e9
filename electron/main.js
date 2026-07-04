@@ -766,13 +766,21 @@ async function startDownload({ gameId, gameTitle, downloadUrl, gameSlug, gameIma
     }
 
     function handleDownload(url) {
+      currentRequestUrl = url;
       const proto = url.startsWith('https') ? https : http;
       const redirectRequest = proto.get(url, {
         timeout: 120000,
         headers: requestHeaders
       }, (res) => {
-        if (res.statusCode === 301 || res.statusCode === 302 || res.statusCode === 303 || res.statusCode === 307) {
-          handleDownload(res.headers.location);
+        if ([301, 302, 303, 307, 308].includes(res.statusCode)) {
+          try {
+            const nextUrl = new URL(res.headers.location, currentRequestUrl).toString();
+            handleDownload(nextUrl);
+          } catch (e) { handleError(new Error('Redirect URL غير صالح')); }
+          return;
+        }
+        if (res.statusCode !== 200 && res.statusCode !== 206) {
+          handleError(new Error(`HTTP ${res.statusCode}`));
           return;
         }
         handleResponse(res, res.statusCode === 206);
